@@ -1,0 +1,2 @@
+# Ignore log files and model checkpoints for double integrator
+logs/double_integrator/*
