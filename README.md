@@ -2,7 +2,7 @@
 
 A Python implementation of the Cersyve framework for learning safe control policies using neural networks with counterexample-guided training.
 
-Converted from the original Julia implementation by Yujie Yang: [Cersyve.jl](https://github.com/yangyujie-jack/Cersyve.jl)
+Converted from the original Julia implementation by Intelligent Control Lab (CMU): [Cersyve.jl](https://github.com/intelligent-control-lab/Cersyve.jl/tree/master)
 
 ---
 
@@ -14,6 +14,9 @@ Cersyve combines:
 - **Value function learning**: Learn a value function $V(x)$ that certifies safety
 - **Counterexample-guided training**: Use adversarial search to find and eliminate safety violations
 - **Regularization techniques**: APA (Activation Pattern Alignment) and SNR (Signal-to-Noise Ratio)
+
+New: 
+- **Enumeration of unsafe regions**: Replacing the Counterexample-guided training to find and eliminate safety violations with more efficient and guaranteed approach.
 
 ### Installation
 
