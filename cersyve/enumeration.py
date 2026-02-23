@@ -203,9 +203,10 @@ def enumerate_unsafe_regions(
     digits_to_consider: int = 0,
     wilks_filtering: bool = True,
     wilks_samples: int = 3500,
-    sample_size_evaluation: int = 10000,
+    sample_size_evaluation: int = 10_000,
     desired_coverage: float = 99.9,
     enumerate_safe_regions: bool = False,
+    incremental_coverage: bool = True,
     verify_safe_regions_with_pgd: bool = False,
     pgd_samples: int = 1000,
     pgd_steps: int = 10,
@@ -233,6 +234,7 @@ def enumerate_unsafe_regions(
         sample_size_evaluation: Number of samples for coverage evaluation
         desired_coverage: Target coverage percentage of regions
         enumerate_safe_regions: If True, enumerate safe regions; if False, enumerate unsafe regions
+        incremental_coverage: If True, only add regions that cover new uncovered samples
         verify_safe_regions_with_pgd: If True and enumerate_safe_regions=True and error=0%, verify with PGD
         pgd_samples: Number of samples for PGD verification
         pgd_steps: Number of PGD steps
@@ -277,7 +279,7 @@ def enumerate_unsafe_regions(
     
     if verbose:
         print(f"Training samples: {n_training_samples}")
-        print(f"  Unsafe (false positives): {n_unsafe} ({100*n_unsafe/n_training_samples:.2f}%)")
+        print(f"  Unsafe : {n_unsafe} ({100*n_unsafe/n_training_samples:.2f}%)")
         print(f"  Safe: {n_safe} ({100*n_safe/n_training_samples:.2f}%)")
     
     # Check if we have samples of the requested type
@@ -285,7 +287,7 @@ def enumerate_unsafe_regions(
     if target_count == 0:
         if verbose:
             print(f"No {region_type} regions found!")
-        return [], {'coverage': 0.0, 'num_regions': 0, 'error': 0.0}
+        return [], {'coverage': 0.0, 'num_regions': 0, 'error_rate': 0.0}
     
     # Train Random Forest
     rf = RandomForestClassifier(
@@ -315,18 +317,26 @@ def enumerate_unsafe_regions(
         eval_outputs = wrapper_model(eval_tensor).cpu().numpy()
 
      # check accuracy of RF on evaluation samples
-    print(f"Evaluating RF accuracy on {sample_size_evaluation} samples...")
-    eval_rf_outputs = rf.predict(eval_inputs)
-    accuracy = np.sum(eval_rf_outputs == eval_outputs) / len(eval_outputs)
-    print(f"RF accuracy: {accuracy:.2f}")
+    if verbose:
+        print(f"Evaluating RF accuracy on {sample_size_evaluation} samples...")
+        eval_rf_outputs = rf.predict(eval_inputs)
+        accuracy = np.sum(eval_rf_outputs == eval_outputs) / len(eval_outputs)
+        print(f"RF accuracy: {accuracy:.2f}")
     
     n_eval_unsafe = np.sum(eval_outputs == -1)
     n_eval_safe = np.sum(eval_outputs == 1)
     n_eval_target = n_eval_safe if enumerate_safe_regions else n_eval_unsafe
+    target_samples = eval_inputs[eval_outputs == 1] if enumerate_safe_regions else eval_inputs[eval_outputs == -1]
+    
+    # Keep original target samples for coverage calculation
+    original_target_samples = target_samples.copy()
+    uncovered_samples = original_target_samples.copy()
     
     # Extract pure leaves from each tree
     filtered_regions = []
     current_regions = []
+    final_coverage = 0.0
+    error_rate = 0.0
     
     for i, tree in enumerate(rf.estimators_):
         rects = get_pure_leaf_rectangles(tree, input_domain, extract_safe=enumerate_safe_regions)
@@ -363,18 +373,33 @@ def enumerate_unsafe_regions(
                 current_regions.append(rect_array)
         
         # Remove contained regions
-        filtered_regions = exact_remove_contained_regions(
-            current_regions, 
-            filtered_regions
-        )
+        if incremental_coverage:
+            # Only add regions that cover new uncovered samples
+            # No containment check needed: leaves from same tree are disjoint
+            for region in current_regions:
+                # Check if this region covers any uncovered samples
+                if len(uncovered_samples) > 0:
+                    inside_mask = is_inside(uncovered_samples, [region])
+                    if np.any(inside_mask):
+                        # This region covers at least one uncovered sample
+                        filtered_regions.append(region)
+        else:
+            # Original behavior: add all non-contained regions
+            filtered_regions = exact_remove_contained_regions(
+                current_regions, 
+                filtered_regions
+            )
         current_regions = []
         
         # Check coverage
         if len(filtered_regions) > 0:
-            target_samples = eval_inputs[eval_outputs == 1] if enumerate_safe_regions else eval_inputs[eval_outputs == -1]
-            inside_mask = is_inside(target_samples, filtered_regions)
+            # Calculate coverage based on ORIGINAL target samples
+            inside_mask = is_inside(original_target_samples, filtered_regions)
             coverage = 100 * np.sum(inside_mask) / n_eval_target if n_eval_target > 0 else 0
             
+            # Track remaining uncovered samples
+            uncovered_samples = original_target_samples[~inside_mask]
+            n_uncovered = len(uncovered_samples)
                 
             # Compute error: misclassified samples in the enumerated regions
             # For safe regions: % of unsafe samples that fall into safe regions (shouldn't be there)
@@ -396,10 +421,10 @@ def enumerate_unsafe_regions(
                 else:
                     error_rate = 0.0
                 
-            if verbose and i % 10 == 0:
+            if verbose and coverage > final_coverage:
                 print(f"\tTree {i+1}/{n_decision_trees}: "
                       f"{len(filtered_regions)} regions, "
-                      f"coverage: {coverage:.2f}%, "
+                      f"coverage: {coverage:.2f}% ({n_uncovered}/{n_eval_target} uncovered), "
                       f"error rate: {error_rate:.2f}%")
                 
             final_coverage = coverage
@@ -411,7 +436,15 @@ def enumerate_unsafe_regions(
         else:
             final_coverage = 0.0
             error_rate = 0.0
+            uncovered_samples = original_target_samples.copy()
+            n_uncovered = len(uncovered_samples)
     
+    # add in the filtered regions the uncovered unsafe inputs 
+    # if len(uncovered_samples) > 0:
+    #     # Convert target_samples to list of rectangles (assuming each sample is a point in n-dimensional space)
+    #     uncovered_regions = [np.array([[s[i], s[i]] for i in range(s.shape[0])]) for s in uncovered_samples]
+    #     filtered_regions.extend(uncovered_regions)
+
         
    
     # PGD verification for safe regions (only if error is 0%)
@@ -474,12 +507,15 @@ def enumerate_unsafe_regions(
                 if pgd_violations_found > 0:
                     print(f"  ⚠ Safe regions may contain {pgd_violations_found} counterexamples!")
     
+
     stats = {
         'coverage': final_coverage,
         'num_regions': len(filtered_regions),
         'n_unsafe_samples': n_eval_unsafe,
         'n_safe_samples': n_eval_safe,
         'n_eval_samples': sample_size_evaluation,
+        'n_uncovered': len(uncovered_samples),
+        'uncovered_samples': uncovered_samples,
         'error_rate': error_rate,
         'pgd_violations': pgd_violations_found
     }
@@ -488,6 +524,7 @@ def enumerate_unsafe_regions(
         print(f"\nEnumeration complete:")
         print(f"  Found {len(filtered_regions)} {region_type} regions")
         print(f"  Coverage of {region_type} regions: {final_coverage:.2f}%")
+        print(f"  Uncovered {region_type} samples: {len(uncovered_samples)}/{n_eval_target}")
         print(f"  Error rate: {error_rate:.2f}%")
         if pgd_violations_found > 0:
             print(f"  PGD violations: {pgd_violations_found}")
