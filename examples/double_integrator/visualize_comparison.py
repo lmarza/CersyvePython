@@ -10,9 +10,55 @@ import numpy as np
 import matplotlib.pyplot as plt
 from systems.double_integrator import DoubleIntegrator
 from cersyve import create_mlp
+from cersyve.utils import uniform
 
 
-def visualize_comparison(fine_tune_model_path='../../models/double_integrator/V_finetune.pth', name_file='plots/comparison_visualization.png'):
+def compute_tfr(V_model, h_model, f_pi_model, n_samples=100_000, horizon=100, device='cpu',
+                return_missed=False):
+    """Compute the True Feasible Rate (TFR).
+
+    TFR = (# states with V(x)<=0 AND truly feasible) / (# truly feasible states)
+
+    A state is truly feasible if a 100-step trajectory starting from it
+    has no constraint violation (h(x) <= 0 at every step).
+    
+    If return_missed=True, also returns the truly feasible states with V(x)>0.
+    """
+    V_model.eval()
+    X = uniform(DoubleIntegrator.x_low, DoubleIntegrator.x_high, n_samples)
+    X_t = torch.from_numpy(X).to(device)  # [x_dim, N]
+
+    with torch.no_grad():
+        V = V_model(X_t.T).T.cpu().numpy()[0, :]  # [N]
+
+        # Forward simulate and check constraints along the trajectory
+        truly_feasible = np.ones(n_samples, dtype=bool)
+        X_current = X_t.clone()  # [x_dim, N]
+        for step in range(horizon):
+            h_current = h_model(X_current.T).T.cpu().numpy()[0, :]
+            truly_feasible &= (h_current <= 0)
+            X_current = f_pi_model(X_current)
+
+    n_truly_feasible = truly_feasible.sum()
+    identified = (V <= 0) & truly_feasible
+    n_identified = identified.sum()
+    missed = truly_feasible & (V > 0)  # truly feasible but V says unsafe
+
+    tfr = n_identified / max(n_truly_feasible, 1)
+    result = {
+        'tfr': tfr,
+        'n_truly_feasible': n_truly_feasible,
+        'n_identified': n_identified,
+        'n_missed': missed.sum(),
+        'truly_feasible_rate': n_truly_feasible / n_samples,
+    }
+    if return_missed:
+        result['X_missed'] = X[:, missed]  # [x_dim, n_missed]
+        result['V_missed'] = V[missed]     # V values at missed states
+    return result
+
+
+def visualize_comparison(fine_tune_model_path='../../models/double_integrator/V_finetune_enum_milp.pth', name_file='plots/comparison_visualization_enum_milp.png'):
     # Device
     device = 'cpu'
 
@@ -132,6 +178,9 @@ def visualize_comparison(fine_tune_model_path='../../models/double_integrator/V_
     counter_pre_inv = sample_counterexamples(invariance_counter_pre, 30)
     counter_fine_inv = sample_counterexamples(invariance_counter_fine, 30)
 
+    # compute TRF for fine-tuned models
+    trf_fine = compute_tfr(V_finetune, h_model, f_pi_model, n_samples=100_000, horizon=100)['tfr']
+
     # Create single comprehensive plot
     fig, ax = plt.subplots(figsize=(10, 8))
 
@@ -217,6 +266,7 @@ def visualize_comparison(fine_tune_model_path='../../models/double_integrator/V_
     print(f"  Constraint counterexamples: {constraint_counter_fine.sum()} points ({constraint_counter_fine.mean() * 100:.3f}%)")
     print(f"  Invariance counterexamples: {invariance_counter_fine.sum()} points ({invariance_counter_fine.mean() * 100:.3f}%)")
     print(f"  Total counterexamples: {(constraint_counter_fine | invariance_counter_fine).sum()}")
+    print(f"  TFR (True Safe Rate): {trf_fine * 100:.2f}%")
 
     print("\nImprovement:")
     reduction = (constraint_counter_pre | invariance_counter_pre).sum() - (constraint_counter_fine | invariance_counter_fine).sum()
