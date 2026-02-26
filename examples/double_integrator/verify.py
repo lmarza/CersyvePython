@@ -88,7 +88,7 @@ def main():
     # Load value model V(x) (use finetuned by default)
     value_hidden_sizes = [32, 32]
     V_model = create_mlp(DoubleIntegrator.x_dim, 1, value_hidden_sizes)
-    V_path = "../../models/double_integrator/V_finetune.pth"
+    V_path = "../../models/double_integrator/V_finetune_milp.pth"
     print(f"Loading V_model from {V_path}...")
     V_model.load_state_dict(torch.load(V_path, map_location=device, weights_only=True))
     V_model.to(device).eval()
@@ -107,7 +107,7 @@ def main():
         DoubleIntegrator.x_high,
         V_h_model,
         V_V_prime_model,
-        strict_margin=1e-4, # for output constraints strict inequalities
+        strict_margin=1e-6, # for output constraints strict inequalities
         device=device,
         timeout_s=300.0,
     )
@@ -121,7 +121,7 @@ def main():
         with torch.no_grad():
             Vx = V_model(x_star).item()
             hx = h_model(x_star).item()
-            # x_next = f_pi_bf(x_star)  # batch-first closed loop
+            # x_next = f_pi_bf(x_star)
             # Vnext = V_model(x_next).item()
 
         print(f"  V(x*): {Vx:.6f}")
