@@ -3,12 +3,14 @@
 import torch
 import torch.nn as nn
 import numpy as np
+from torch.nn import Module
 from torch.utils.tensorboard import SummaryWriter
 from datetime import datetime
 from tqdm import tqdm
 from typing import Optional
 import os
 
+from systems import DoubleIntegrator
 from .buffer import Buffer
 from .search import boundary_guided_search, projected_boundary_search, filter_counterexample
 from .enumeration import (
@@ -18,6 +20,7 @@ from .enumeration import (
 )
 from .utils import uniform, set_seed
 from .model import create_value_constraint_model, create_value_next_value_model
+from .verify import verify_value as verify_value_abcrown, ClosedLoopDynamicsBatchFirst, ValueConstraintPropertyBF, ClosedLoopDynamicsBatchFirstWrapper, ValueNextValuePropertyBF
 
 
 def finetune_value(
@@ -45,7 +48,7 @@ def finetune_value(
     sample_size: int = 100,
     search_stop: int = 1000,
     replay: int = 1,
-    max_skip: int = 1000,
+    max_skip: int = 200,
     reg_method: Optional[str] = "ESR",  # "ESR" / "RSR" / None
     esr_max_con: Optional[int] = None,
     eps_h: float = 0.01,
@@ -119,6 +122,10 @@ def finetune_value(
     os.makedirs(log_dir, exist_ok=True)
     log_path = os.path.join(log_dir, f"finetune_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
     writer = SummaryWriter(log_path)
+    # Property networks
+    f_pi_bf = ClosedLoopDynamicsBatchFirstWrapper(f_pi_model).to(device).eval()
+    V_h_model = ValueConstraintPropertyBF(V_model, h_model).to(device).eval()
+    V_V_prime_model = ValueNextValuePropertyBF(V_model, f_pi_bf).to(device).eval()
     
     for i in tqdm(range(max_iter), desc="Finetuning value function"):
         # Search for counterexamples

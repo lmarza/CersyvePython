@@ -36,6 +36,7 @@ from .enumeration import (
     get_pure_leaf_rectangles
 )
 from .finetune import finetune_value, finetune_value_enumeration
+from .verify import verify_value
 
 __version__ = "1.0.0"
 __author__ = ""
@@ -73,4 +74,7 @@ __all__ = [
     'enumerate_unsafe_regions',
     'sample_from_regions',
     'get_pure_leaf_rectangles',
+
+    # Verification
+    'verify_value',
 ]

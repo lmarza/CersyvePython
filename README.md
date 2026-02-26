@@ -17,6 +17,7 @@ Cersyve combines:
 
 New: 
 - **Enumeration of unsafe regions**: Replacing the Counterexample-guided training to find and eliminate safety violations with more efficient and guaranteed approach.
+- **Verification with alpha-beta-CROWN**: Replacing the MILP-based verifier used in the original Julia implementation with alpha-beta-CROWN, which provides complete (branch-and-bound) neural network verification and avoids requiring a separate MILP solver/toolchain.
 
 ### Installation
 
@@ -32,6 +33,13 @@ conda activate cersyve
 # Install dependencies
 pip install -r requirements.txt
 ```
+
+### Install alpha-beta-CROWN
+The verifier is included as a git submodule under third_party. Install the verifier using the provided script:
+```bash
+bash scripts/install_verifier.sh
+```
+
 ---
 
 ## Quick Start

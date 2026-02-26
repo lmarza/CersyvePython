@@ -300,7 +300,7 @@ def enumerate_unsafe_regions(
     if verbose:
         print(f"Trained RF with {n_decision_trees} trees, extracting {region_type} regions...")
     
-    # Get evaluation samples
+    # Get evaluation samplesF
     eval_inputs = np.random.uniform(
         input_domain[:, 0],
         input_domain[:, 1],
