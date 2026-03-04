@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../.
 import torch
 import numpy as np
 from systems.double_integrator import DoubleIntegrator
-from cersyve import create_mlp, create_closed_loop_dynamics_model, finetune_value
+from cersyve import create_mlp, create_closed_loop_dynamics_model, finetune_value_w_MILP
 
 # Load data
 data_path = '../../data/double_integrator_data.npz'
@@ -63,47 +63,57 @@ print(f"  Total parameters: {sum(p.numel() for p in V_model.parameters())}")
 print("\nFinetuning value function...")
 
 # Set random seed for reproducibility
-seed = 42
+seeds = [0,1,2]
+tfrs = []
+iters = []
 
-log_path = finetune_value_w_MILP(
-    V_model=V_model,
-    f_pi_model=f_pi_model,
-    h_model=h_model,
-    x_low=DoubleIntegrator.x_low,
-    x_high=DoubleIntegrator.x_high,
-    lr=1e-4,
-    max_iter=100000,
-    search_size=1000,
-    bnd_ratio=0.1,
-    bnd_ratio_avg=0.9,
-    min_bnd_ratio=0.01,
-    max_bnd_ratio=1.0,
-    bnd_eps=0.1,
-    search_method="BGB",  # Boundary-Guided Branching
-    pgd_step=10,
-    pgd_eps=0.1,
-    backtrack_step=20,
-    length_discount=0.8,
-    direct_discount=0.5,
-    tol=1e-4,
-    capacity=10000,
-    sample_size=100,
-    search_stop=1000,
-    replay=1,
-    max_skip=1000,
-    reg_method="ESR",  # Entering State Regularization
-    eps_h=0.01,
-    eps_v=0.01,
-    reg_coef=0.1,
-    log_dir='../../logs/double_integrator/',
-    eval_every=10,
-    save_every=1000,
-    device=device,
-    seed=seed
-)
+for seed in seeds:
+    print("Test seed:", seed)
+    log_path, tfr, iterations = finetune_value_w_MILP(
+        V_model=V_model,
+        f_pi_model=f_pi_model,
+        h_model=h_model,
+        x_low=DoubleIntegrator.x_low,
+        x_high=DoubleIntegrator.x_high,
+        lr=1e-4,
+        max_iter=100000,
+        search_size=1000,
+        bnd_ratio=0.1,
+        bnd_ratio_avg=0.9,
+        min_bnd_ratio=0.01,
+        max_bnd_ratio=1.0,
+        bnd_eps=0.1,
+        search_method="BGB",  # Boundary-Guided Branching
+        pgd_step=10,
+        pgd_eps=0.1,
+        backtrack_step=20,
+        length_discount=0.8,
+        direct_discount=0.5,
+        tol=1e-4,
+        capacity=10000,
+        sample_size=100,
+        search_stop=1000,
+        replay=1,
+        max_skip=1000,
+        reg_method="ESR",  # Entering State Regularization
+        eps_h=0.01,
+        eps_v=0.01,
+        reg_coef=0.1,
+        log_dir='../../logs/double_integrator/',
+        eval_every=10,
+        save_every=1000,
+        device=device,
+        seed=seed
+    )
+
+    tfrs.append(tfr)
+    iters.append(iterations)
+
 
 print(f"\nFinetuning complete!")
-print(f"Model saved to: models/double_integrator/V_finetune.pth")
+print(f"Model saved to: models/double_integrator/V_finetune_milp.pth")
 print(f"Logs saved to: {log_path}")
 print(f"\nTo view training curves, run:")
 print(f"  tensorboard --logdir={log_path}")
+print(f"Mean True Feasibility Region (TFR): {np.mean(tfrs)*100:.4f}% (std: {np.std(tfrs)*100:.4f})")
+print(f"Mean iterations: {np.mean(iters):.2f} (std: {np.std(iters):.2f})")

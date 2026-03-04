@@ -26,7 +26,7 @@ git clone https://github.com/lmarza/CersyvePython
 cd CersyvePython
 
 # Create a conda environment (optional but recommended), may need newer python version depending on your CUDA capability
-conda create -n cersyve python=3.8
+conda create -n cersyve python=3.11
 conda activate cersyve
 
 # Install dependencies

@@ -35,8 +35,8 @@ from .enumeration import (
     sample_from_regions,
     get_pure_leaf_rectangles
 )
-from .finetune import finetune_value, finetune_value_w_MILP, finetune_value_enum_MILP
-from .milp import milp_verify, milp_verify_constraint, milp_verify_invariance
+from .finetune import finetune_value_w_MILP, finetune_value_enum_MILP
+from .verify import verify_value
 
 __version__ = "1.0.0"
 __author__ = ""
@@ -70,14 +70,12 @@ __all__ = [
     'projected_boundary_search',
     'filter_counterexample',
     
-    # MILP Verification
-    'milp_verify',
-    'milp_verify_constraint',
-    'milp_verify_invariance',
-    
     # Enumeration
     'BinaryDecisionWrapperCBF',
     'enumerate_unsafe_regions',
     'sample_from_regions',
     'get_pure_leaf_rectangles',
+
+    # Verification
+    'verify_value',
 ]

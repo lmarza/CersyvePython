@@ -20,262 +20,6 @@ from .enumeration import (
 from .utils import uniform, set_seed
 from .model import create_value_constraint_model, create_value_next_value_model
 
-
-def finetune_value(
-    V_model: nn.Module,
-    f_pi_model: nn.Module,
-    h_model: nn.Module,
-    x_low: np.ndarray,
-    x_high: np.ndarray,
-    lr: float = 1e-4,
-    max_iter: int = 100000,
-    search_size: int = 1000,
-    bnd_ratio: float = 0.1,
-    bnd_ratio_avg: float = 0.9,
-    min_bnd_ratio: float = 0.01,
-    max_bnd_ratio: float = 1.0,
-    bnd_eps: float = 0.1,
-    search_method: str = "BGB",  # "BGB" / "PGD-B" / "PBS"
-    pgd_step: int = 10,
-    pgd_eps: float = 0.1,
-    backtrack_step: int = 20,
-    length_discount: float = 0.8,
-    direct_discount: float = 0.5,
-    tol: float = 1e-4,
-    capacity: int = 10000,
-    sample_size: int = 100,
-    search_stop: int = 1000,
-    replay: int = 1,
-    max_skip: int = 1000,
-    reg_method: Optional[str] = "ESR",  # "ESR" / "RSR" / None
-    esr_max_con: Optional[int] = None,
-    eps_h: float = 0.01,
-    eps_v: float = 0.01,
-    reg_coef: float = 0.1,
-    log_dir: Optional[str] = None,
-    eval_every: int = 10,
-    save_every: int = 1000,
-    device: str = 'cpu',
-    seed: int = 42
-) -> str:
-    """
-    Fine-tune value function using counterexample-guided search.
-    
-    The algorithm iteratively:
-    1. Searches for counterexamples near the boundary V(x) = 0
-    2. Trains the value function to exclude counterexamples
-    3. Uses regularization to encourage conservative estimates
-    
-    Args:
-        V_model: Value function model
-        f_pi_model: Closed-loop dynamics model
-        h_model: Constraint model
-        x_low, x_high: State space bounds
-        lr: Learning rate
-        max_iter: Maximum number of iterations
-        search_size: Number of samples for boundary search
-        bnd_ratio: Initial ratio of boundary samples
-        bnd_ratio_avg: Exponential moving average factor for boundary ratio
-        min_bnd_ratio, max_bnd_ratio: Bounds on boundary ratio
-        bnd_eps: Tolerance for boundary sampling
-        search_method: Search algorithm ("BGB", "PGD-B", or "PBS")
-        pgd_step: Number of PGD steps
-        pgd_eps: PGD step size
-        backtrack_step: Number of backtracking steps
-        length_discount: Discount factor for step length
-        direct_discount: Discount factor for boundary guidance
-        tol: Tolerance for counterexample detection
-        capacity: Buffer capacity
-        sample_size: Number of samples to train on per iteration
-        search_stop: Stop searching after this many counterexamples found
-        replay: Number of times to replay each counterexample
-        max_skip: Maximum iterations without finding counterexamples before stopping
-        reg_method: Regularization method ("ESR", "RSR", or None)
-        esr_max_con: Maximum counterexamples for ESR
-        eps_h: Constraint threshold for ESR
-        eps_v: Value threshold for ESR
-        reg_coef: Regularization coefficient
-        log_dir: Directory for logs
-        eval_every: Evaluate feasible rate every N iterations
-        save_every: Save model every N iterations
-        device: Device to train on
-        seed: Random seed for reproducibility
-        
-    Returns:
-        log_path: Path to saved model and logs
-    """
-    set_seed(seed)
-    V_model = V_model.to(device)
-    f_pi_model = f_pi_model.to(device)
-    h_model = h_model.to(device)
-    
-    skipped = 0
-    verified = 0
-    
-    buffer = Buffer(capacity, len(x_low))
-    optimizer = torch.optim.Adam(V_model.parameters(), lr=lr)
-    
-    if log_dir is None:
-        log_dir = './logs/'
-    os.makedirs(log_dir, exist_ok=True)
-    log_path = os.path.join(log_dir, f"finetune_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
-    writer = SummaryWriter(log_path)
-    
-    for i in tqdm(range(max_iter), desc="Finetuning value function"):
-        # Search for counterexamples
-        if len(buffer) < search_stop:
-            # Sample boundary states
-            x = uniform(x_low, x_high, round(search_size / bnd_ratio))
-            x_t = torch.from_numpy(x).to(device)
-            with torch.no_grad():
-                v = V_model(x_t.T).T.cpu().numpy()[0, :]
-            
-            x_bnd = x[:, (v > -bnd_eps) & (v <= tol)]
-            bnd_ratio = bnd_ratio_avg * bnd_ratio + (1 - bnd_ratio_avg) * x_bnd.shape[1] / x.shape[1]
-            bnd_ratio = np.clip(bnd_ratio, min_bnd_ratio, max_bnd_ratio)
-            
-            # Run adversarial search
-            if search_method == "BGB":
-                x_pgd = boundary_guided_search(
-                    x_bnd, x_low, x_high, h_model, V_model, f_pi_model,
-                    pgd_step=pgd_step, pgd_eps=pgd_eps, backtrack_step=backtrack_step,
-                    length_discount=length_discount, bound_guide=True,
-                    direct_discount=direct_discount, tol=tol, device=device
-                )
-            elif search_method == "PGD-B":
-                x_pgd = boundary_guided_search(
-                    x_bnd, x_low, x_high, h_model, V_model, f_pi_model,
-                    pgd_step=pgd_step, pgd_eps=pgd_eps, backtrack_step=backtrack_step,
-                    length_discount=length_discount, bound_guide=False, tol=tol, device=device
-                )
-            elif search_method == "PBS":
-                x_pgd = projected_boundary_search(
-                    x_bnd, x_low, x_high, h_model, V_model, f_pi_model,
-                    tol=tol, device=device
-                )
-            
-            # Filter counterexamples
-            con, inv = filter_counterexample(x_pgd, h_model, V_model, f_pi_model, tol=tol, device=device)
-            ce = con | inv
-            if np.any(ce):
-                buffer.push(x_pgd[:, ce])
-            
-            writer.add_scalar('finetune/searched_boundary_states', x_bnd.shape[1], i)
-            writer.add_scalar('finetune/boundary_state_ratio', bnd_ratio, i)
-            writer.add_scalar('finetune/searched_constraint_counterexample', con.sum(), i)
-            writer.add_scalar('finetune/searched_invariance_counterexample', inv.sum(), i)
-        
-        # Train on counterexamples
-        if len(buffer) > 0:
-            skipped = 0
-            
-            n = min(sample_size, len(buffer))
-            x, c = buffer.pop(n)
-            
-            # Re-filter counterexamples (some may no longer be violations)
-            con, inv = filter_counterexample(x, h_model, V_model, f_pi_model, tol=tol, device=device)
-            x_con, x_inv = x[:, con], x[:, inv]
-            
-            # Update replay counts
-            c[con | inv] = 0
-            c[~con & ~inv] += 1
-            push_idx = c < replay
-            if np.any(push_idx):
-                buffer.push(x[:, push_idx], c[push_idx])
-            
-            n_con, n_inv = x_con.shape[1], x_inv.shape[1]
-            
-            # Sample regularization states
-            if reg_method is not None and (n_con + n_inv > 0) and \
-               (esr_max_con is None or (n_con + n_inv < esr_max_con)):
-                if reg_method == "ESR":
-                    # Entering State Regularization
-                    x_reg = uniform(x_low, x_high, search_size)
-                    x_reg_t = torch.from_numpy(x_reg).to(device)
-                    with torch.no_grad():
-                        h_reg = h_model(x_reg_t.T).T.cpu().numpy()[0, :]
-                        v_reg = V_model(x_reg_t.T).T.cpu().numpy()[0, :]
-                        x_reg_prime = f_pi_model(x_reg_t)
-                        v_reg_prime = V_model(x_reg_prime.T).T.cpu().numpy()[0, :]
-                    
-                    # Entering states: safe, positive value, next state has negative value
-                    entering = (h_reg <= -eps_h) & (v_reg > 0) & \
-                               (v_reg <= eps_v) & (v_reg_prime <= -eps_v)
-                    x_reg = x_reg[:, entering]
-                    n_reg = x_reg.shape[1]
-                elif reg_method == "RSR":
-                    # Random State Regularization
-                    x_reg = uniform(x_low, x_high, search_size)
-                    n_reg = x_reg.shape[1]
-            else:
-                n_reg = 0
-            
-            # Compute loss and update
-            optimizer.zero_grad()
-            
-            loss = 0.0
-            if n_con > 0:
-                x_con_t = torch.from_numpy(x_con).to(device)
-                con_loss = -V_model(x_con_t.T).T.sum()
-                loss += con_loss
-            
-            if n_inv > 0:
-                x_inv_t = torch.from_numpy(x_inv).to(device)
-                v_inv = V_model(x_inv_t.T).T
-                x_inv_prime = f_pi_model(x_inv_t)
-                v_inv_prime = V_model(x_inv_prime.T).T
-                inv_loss = (-v_inv + v_inv_prime).sum()
-                loss += inv_loss
-            
-            if n_con + n_inv > 0:
-                loss = loss / (n_con + n_inv)
-            
-            if n_reg > 0:
-                x_reg_t = torch.from_numpy(x_reg).to(device)
-                reg_loss = V_model(x_reg_t.T).T.mean()
-                loss = loss + reg_coef * reg_loss
-            
-            if isinstance(loss, torch.Tensor):
-                loss.backward()
-                optimizer.step()
-            
-            writer.add_scalar('finetune/sample_size', n, i)
-            writer.add_scalar('finetune/value_loss', loss.item() if isinstance(loss, torch.Tensor) else 0.0, i)
-            writer.add_scalar('finetune/sampled_constraint_counterexample', n_con, i)
-            writer.add_scalar('finetune/sampled_invariance_counterexample', n_inv, i)
-            if reg_method is not None:
-                writer.add_scalar('finetune/regularization_state', n_reg, i)
-        else:
-            skipped += 1
-        
-        writer.add_scalar('finetune/total_counterexample', len(buffer), i)
-        writer.add_scalar('finetune/skipped_update', skipped, i)
-        writer.add_scalar('finetune/verified_times', verified, i)
-        
-        # Evaluation
-        if i % eval_every == 0:
-            x_eval = uniform(x_low, x_high, search_size)
-            x_eval_t = torch.from_numpy(x_eval).to(device)
-            with torch.no_grad():
-                fea_rate = (V_model(x_eval_t.T).T <= 0).float().mean().item()
-            writer.add_scalar('finetune/predicted_feasible_rate', fea_rate, i)
-        
-        # Save checkpoint
-        if (i + 1) % save_every == 0:
-            torch.save(V_model.state_dict(), os.path.join(log_path, f'V_finetune_iter{i+1}.pth'))
-        
-        # Check stopping criterion
-        if skipped >= max_skip:
-            print(f"\nStopping: no counterexamples found for {max_skip} iterations")
-            break
-    
-    # Save final model
-    torch.save(V_model.state_dict(), os.path.join("../../models/double_integrator/", 'V_finetune.pth'))
-    writer.close()
-    
-    return log_path
-
-
 def finetune_value_w_MILP(
     V_model: nn.Module,
     f_pi_model: nn.Module,
@@ -549,7 +293,29 @@ def finetune_value_w_MILP(
     else:
         print(f"\nTraining complete (max_iter reached). Model saved to models/double_integrator/")
 
-    return log_path
+    V_model.eval()
+    X = uniform(x_low, x_high, 100_000)
+    X_t = torch.from_numpy(X).to(device)  # [x_dim, N]
+
+    with torch.no_grad():
+        V = V_model(X_t.T).T.cpu().numpy()[0, :]  # [N]
+
+        # Forward simulate and check constraints along the trajectory
+        truly_feasible = np.ones(100_000, dtype=bool)
+        X_current = X_t.clone()  # [x_dim, N]
+        for step in range(100):
+            h_current = h_model(X_current.T).T.cpu().numpy()[0, :]
+            truly_feasible &= (h_current <= 0)
+            X_current = f_pi_model(X_current)
+
+    n_truly_feasible = truly_feasible.sum()
+    identified = (V <= 0) & truly_feasible
+    n_identified = identified.sum()
+    missed = truly_feasible & (V > 0)  # truly feasible but V says unsafe
+
+    tfr = n_identified / max(n_truly_feasible, 1)
+    print("\n\n")
+    return log_path, tfr, i
 
 
 def finetune_value_enum_MILP(
@@ -975,4 +741,27 @@ def finetune_value_enum_MILP(
     else:
         print(f"\nTraining complete (max_iter reached). Model saved to {save_path}")
 
-    return log_path
+
+    V_model.eval()
+    X = uniform(x_low, x_high, 100_000)
+    X_t = torch.from_numpy(X).to(device)  # [x_dim, N]
+
+    with torch.no_grad():
+        V = V_model(X_t.T).T.cpu().numpy()[0, :]  # [N]
+
+        # Forward simulate and check constraints along the trajectory
+        truly_feasible = np.ones(100_000, dtype=bool)
+        X_current = X_t.clone()  # [x_dim, N]
+        for step in range(100):
+            h_current = h_model(X_current.T).T.cpu().numpy()[0, :]
+            truly_feasible &= (h_current <= 0)
+            X_current = f_pi_model(X_current)
+
+    n_truly_feasible = truly_feasible.sum()
+    identified = (V <= 0) & truly_feasible
+    n_identified = identified.sum()
+    missed = truly_feasible & (V > 0)  # truly feasible but V says unsafe
+
+    tfr = n_identified / max(n_truly_feasible, 1)
+    print("\n\n")
+    return log_path, tfr, i

@@ -58,7 +58,7 @@ def compute_tfr(V_model, h_model, f_pi_model, n_samples=100_000, horizon=100, de
     return result
 
 
-def visualize_comparison(fine_tune_model_path='../../models/double_integrator/V_finetune_enum_milp.pth', name_file='plots/comparison_visualization_enum_milp.png'):
+def visualize_comparison(fine_tune_model_path='../../models/double_integrator/V_finetune_milp.pth', name_file='plots/comparison_visualization_milp.png'):
     # Device
     device = 'cpu'
 

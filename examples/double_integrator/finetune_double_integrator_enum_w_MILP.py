@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../.
 import torch
 import numpy as np
 from systems.double_integrator import DoubleIntegrator
-from cersyve import create_mlp, create_closed_loop_dynamics_model, finetune_value
+from cersyve import create_mlp, create_closed_loop_dynamics_model, finetune_value_enum_MILP
 
 # Load data
 data_path = '../../data/double_integrator_data.npz'
@@ -63,53 +63,65 @@ print(f"  Total parameters: {sum(p.numel() for p in V_model.parameters())}")
 print("\nFinetuning value function...")
 
 # Set random seed for reproducibility
-seed = 42
+seeds = [0,1,2]
+tfrs = []
+iters = []
 
-log_path = finetune_value_enum_MILP(
-    V_model=V_model,
-    f_pi_model=f_pi_model,
-    h_model=h_model,
-    x_low=DoubleIntegrator.x_low,
-    x_high=DoubleIntegrator.x_high,
-    lr=1e-4,
-    max_iter=100000,
-    tol=1e-4,
-    capacity=10000,
-    sample_size=100,
-    replay=1,
-    max_skip=1000,
-    # Enumeration parameters
-    enum_freq=1000,
-    enum_n_samples=20000,
-    enum_coverage=70.0,
-    enum_n_trees=2000,
-    enum_max_depth=20,
-    enum_n_train=40000,
-    refill_threshold=500,
-    # Neighbourhood fallback
-    fallback_eval_rounds=5,
-    fallback_eval_samples=100000,
-    fallback_n_neighbors=5000,
-    fallback_radius=0.05,
-    # Regularisation
-    search_size=1000,
-    reg_method="ESR",
-    eps_h=0.01,
-    eps_v=0.01,
-    reg_coef=0.1,
-    # MILP
-    milp_timeout=300,
-    # Logging
-    log_dir='../../logs/double_integrator/',
-    eval_every=100,
-    save_every=5000,
-    save_path='../../models/double_integrator/V_finetune_enum_milp.pth',
-    device=device,
-    seed=seed,
-)
+for seed in seeds:
+    print("Test seed:", seed)
+    
+    log_path, tfr, iterations = finetune_value_enum_MILP(
+        V_model=V_model,
+        f_pi_model=f_pi_model,
+        h_model=h_model,
+        x_low=DoubleIntegrator.x_low,
+        x_high=DoubleIntegrator.x_high,
+        lr=1e-4,
+        max_iter=100000,
+        tol=1e-4,
+        capacity=10000,
+        sample_size=100,
+        replay=1,
+        max_skip=1000,
+        # Enumeration parameters
+        enum_freq=1000,
+        enum_n_samples=20000,
+        enum_coverage=70.0,
+        enum_n_trees=2000,
+        enum_max_depth=20,
+        enum_n_train=40000,
+        refill_threshold=500,
+        # Neighbourhood fallback
+        fallback_eval_rounds=5,
+        fallback_eval_samples=100000,
+        fallback_n_neighbors=5000,
+        fallback_radius=0.05,
+        # Regularisation
+        search_size=1000,
+        reg_method="ESR",
+        eps_h=0.01,
+        eps_v=0.01,
+        reg_coef=0.1,
+        # MILP
+        milp_timeout=300,
+        # Logging
+        log_dir='../../logs/double_integrator/',
+        eval_every=100,
+        save_every=5000,
+        save_path='../../models/double_integrator/V_finetune_enum_milp.pth',
+        device=device,
+        seed=seed,
+    )
+
+    tfrs.append(tfr)
+    iters.append(iterations)
+
+
 
 print(f"\nFinetuning complete!")
 print(f"Model saved to: models/double_integrator/V_finetune_enum_milp.pth")
 print(f"Logs saved to: {log_path}")
 print(f"\nTo view training curves, run:")
 print(f"  tensorboard --logdir={log_path}")
+print(f"Mean True Feasibility Region (TFR): {np.mean(tfrs)*100:.4f}% (std: {np.std(tfrs)*100:.4f})")
+print(f"Mean iterations: {np.mean(iters):.2f} (std: {np.std(iters):.2f})")
