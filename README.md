@@ -18,6 +18,8 @@ Cersyve combines:
 New: 
 - **Enumeration of unsafe regions**: Replacing the Counterexample-guided training to find and eliminate safety violations with more efficient and guaranteed approach.
 
+- **Verification with alpha-beta-CROWN**: Replacing the MILP-based verifier used in the original Julia implementation with alpha-beta-CROWN, which provides complete (branch-and-bound) neural network verification and avoids requiring a separate MILP solver/toolchain.
+
 ### Installation
 
 ```bash
@@ -53,8 +55,11 @@ python train_constraint_double_integrator.py
 # Step 4: Pretrain value function V(x)
 python pretrain_double_integrator.py
 
-# Step 5: Finetune value function using counterexample search
-python finetune_double_integrator.py
+# Step 5: Finetune value function using counterexample search and MILP certification
+python finetune_double_integrator_w_MILP.py
+
+# Step 6: Finetune value function using enum+MILP certification
+python finetune_double_integrator_enum_w_MILP.py
 ```
 
 ### Visualize Training Progress
@@ -73,4 +78,10 @@ python visualize_comparison.py
 
 ```bash
 python enumerate_and_visualize_safe_regions.py
+```
+
+### Visualize the fine-tuned value functions trained with PGD+MILP certification and enum+MILP certification
+
+```bash
+python visualize_comparison_finetuned_models.py
 ```
