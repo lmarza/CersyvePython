@@ -103,12 +103,15 @@ class Unicycle:
     @staticmethod
     def create_policy() -> nn.Module:
         """
-        Create fixed policy pi(x) = [1, -yo].
-        
+        Create fixed policy pi(x) = clip([1, -yo], u_low, u_high).
+
         This policy accelerates forward and turns away from obstacle.
-        
+        The output is clipped to action bounds using a ReLU trick so that
+        the policy is representable as an nn.Sequential of Linear/ReLU layers,
+        which is required by the MILP encoder.
+
         Returns:
-            pi_model: Policy network
+            pi_model: Policy network (nn.Sequential)
         """
         # Linear layer: u = W*x + b
         # u[0] = 1 (constant acceleration)
@@ -116,15 +119,48 @@ class Unicycle:
         weight = torch.tensor([[0.0, 0.0, 0.0],
                                [0.0, 0.0, -1.0]], dtype=torch.float32)
         bias = torch.tensor([1.0, 0.0], dtype=torch.float32)
-        
-        pi_model = nn.Linear(3, 2)
-        pi_model.weight.data = weight
-        pi_model.bias.data = bias
-        
+
+        u_low = torch.from_numpy(Unicycle.u_low)   # [-1, -1]
+        u_high = torch.from_numpy(Unicycle.u_high)  # [ 1,  1]
+
+        layers = []
+
+        # Base linear feedback
+        linear = nn.Linear(3, 2)
+        linear.weight.data = weight
+        linear.bias.data = bias
+        layers.append(linear)
+
+        # clip lower: max(u, u_low) = relu(u - u_low) + u_low
+        low_shift = nn.Linear(2, 2)
+        low_shift.weight.data = torch.eye(2)
+        low_shift.bias.data = -u_low
+        layers.append(low_shift)
+        layers.append(nn.ReLU())
+
+        low_restore = nn.Linear(2, 2)
+        low_restore.weight.data = torch.eye(2)
+        low_restore.bias.data = u_low
+        layers.append(low_restore)
+
+        # clip upper: min(u, u_high) = -relu(-u + u_high) + u_high
+        high_shift = nn.Linear(2, 2)
+        high_shift.weight.data = -torch.eye(2)
+        high_shift.bias.data = u_high
+        layers.append(high_shift)
+        layers.append(nn.ReLU())
+
+        high_restore = nn.Linear(2, 2)
+        high_restore.weight.data = -torch.eye(2)
+        high_restore.bias.data = u_high
+        layers.append(high_restore)
+
+        pi_model = nn.Sequential(*layers)
+
         # Freeze parameters
         for param in pi_model.parameters():
             param.requires_grad = False
-        
+
         return pi_model
 
 
