@@ -1,37 +1,57 @@
 """
-Train constraint model h(x) for CartPole using the analytic constraint.
+Example: Train constraint model for the CartPole system.
 """
 
-import os, sys
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
+import os
+import sys
+# Add project root to path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
 import torch
 from systems.cart_pole import CartPole
 from cersyve import create_mlp, train_constraint
 
-def main():
-    models_dir = "../../models/cart_pole/"
-    logs_dir = "../../logs/cart_pole/"
-    os.makedirs(models_dir, exist_ok=True)
-    os.makedirs(logs_dir, exist_ok=True)
+# Create constraint model
+constraint_hidden_sizes = [32, 32]
+h_model = create_mlp(CartPole.x_dim, 1, constraint_hidden_sizes)
 
-    h_model = create_mlp(CartPole.x_dim, 1, [32, 32])
+print("Constraint model architecture:")
+print(f"  Input dim: {CartPole.x_dim}")
+print(f"  Hidden sizes: {constraint_hidden_sizes}")
+print(f"  Output dim: 1")
+print(f"  Total parameters: {sum(p.numel() for p in h_model.parameters())}")
 
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    log_path = train_constraint(
-        x_low=CartPole.x_low,
-        x_high=CartPole.x_high,
-        h_model=h_model,
-        constraint=CartPole.constraint,
-        lr=3e-4,
-        batch_size=256,
-        n_iter=150_000,
-        log_dir=logs_dir,
-        device=device,
-        seed=42
-    )
-    print("Logs:", log_path)
-    print("Saved model to:", os.path.join(models_dir, "h.pth"))
+# Train constraint model
+print("\nTraining constraint model...")
+device = "cpu"
+print(f"Using device: {device}")
 
-if __name__ == "__main__":
-    main()
+# Set random seed for reproducibility
+seed = 42
+
+# Ensure log/model dirs exist (recommended)
+os.makedirs('../../logs/cart_pole/', exist_ok=True)
+os.makedirs('../../models/cart_pole/', exist_ok=True)
+
+log_path = train_constraint(
+    x_low=CartPole.x_low,
+    x_high=CartPole.x_high,
+    h_model=h_model,
+    constraint=CartPole.constraint,
+    lr=3e-4,
+    batch_size=256,
+    n_iter=150000,
+    log_dir='../../logs/cart_pole/',
+    device=device,
+    seed=seed
+)
+
+os.makedirs('../../models/cart_pole/', exist_ok=True)
+torch.save(h_model.state_dict(), '../../models/cart_pole/h.pth')
+print("FORCED SAVE:", os.path.abspath('../../models/cart_pole/h.pth'))
+
+print("\nTraining complete!")
+print("Model saved to: models/cart_pole/h.pth")
+print(f"Logs saved to: {log_path}")
+print("\nTo view training curves, run:")
+print(f"  tensorboard --logdir={log_path}")
