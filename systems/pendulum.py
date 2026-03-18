@@ -35,7 +35,7 @@ class Pendulum:
     g = 10.0
     m = 1.0
     l = 1.0
-    dt = 0.05
+    dt = 0.05 
     tmp1 = 3 * g / (2 * l) * dt
     tmp2 = 9 / (m * l ** 2) * dt
     
@@ -111,6 +111,7 @@ class Pendulum:
         
         P = solve_discrete_are(A, B, Q, R)
         K = np.linalg.inv(R + B.T @ P @ B) @ (B.T @ P @ A)
+        K = K.astype(np.float32)
         
         # Policy: u = -K*x, clipped to [u_low, u_high]
         layers = []

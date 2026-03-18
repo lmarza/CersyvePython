@@ -333,6 +333,7 @@ def milp_verify(V_model, h_model, f_pi_model, x_low, x_high, timeout=300,
             print(f"    MILP constraint check: VIOLATION found  ({dt:.1f}s)")
         all_ce.append(ce)
         verified = False
+        return verified, np.concatenate(all_ce, axis=1)
     elif found is False:
         if verbose:
             print(f"    MILP constraint check: PASSED           ({dt:.1f}s)")

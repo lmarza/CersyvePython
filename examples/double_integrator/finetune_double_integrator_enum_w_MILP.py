@@ -46,30 +46,25 @@ h_model_path = '../../models/double_integrator/h.pth'  # Update path as needed
 print(f"Loading constraint model from {h_model_path}...")
 h_model.load_state_dict(torch.load(h_model_path, map_location=device, weights_only=True))
 
-# Create and load pretrained value function
-value_hidden_sizes = [32, 32]
-V_model = create_mlp(DoubleIntegrator.x_dim, 1, value_hidden_sizes)
-V_pretrain_path = '../../models/double_integrator/V_pretrain.pth'  # Update path as needed
-print(f"Loading pretrained value function from {V_pretrain_path}...")
-V_model.load_state_dict(torch.load(V_pretrain_path, map_location=device, weights_only=True))
-
-print(f"\nValue function model architecture:")
-print(f"  Input dim: {DoubleIntegrator.x_dim}")
-print(f"  Hidden sizes: {value_hidden_sizes}")
-print(f"  Output dim: 1")
-print(f"  Total parameters: {sum(p.numel() for p in V_model.parameters())}")
 
 # Finetune value function using counterexample-guided search
 print("\nFinetuning value function...")
 
 # Set random seed for reproducibility
-seeds = [0,1,2]
+#seeds = [42, 2101, 70]
+seeds = [1, 0, 2]
 tfrs = []
 iters = []
 
 for seed in seeds:
     print("Test seed:", seed)
-    
+
+    value_hidden_sizes = [32, 32]
+    V_model = create_mlp(DoubleIntegrator.x_dim, 1, value_hidden_sizes)
+    V_pretrain_path = '../../models/double_integrator/V_pretrain.pth'  # Update path as needed
+    print(f"Loading pretrained value function from {V_pretrain_path}...")
+    V_model.load_state_dict(torch.load(V_pretrain_path, map_location=device, weights_only=True))
+        
     log_path, tfr, iterations = finetune_value_enum_MILP(
         V_model=V_model,
         f_pi_model=f_pi_model,
@@ -108,9 +103,9 @@ for seed in seeds:
         log_dir='../../logs/double_integrator/',
         eval_every=100,
         save_every=5000,
-        save_path='../../models/double_integrator/V_finetune_enum_milp.pth',
         device=device,
         seed=seed,
+        task="double_integrator"
     )
 
     tfrs.append(tfr)

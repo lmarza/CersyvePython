@@ -30,7 +30,8 @@ def pretrain_value(
     snr_coef: Tuple[float, float] = (1e-3, 5e-4),
     log_dir: Optional[str] = None,
     device: str = 'cpu',
-    seed: int = 1
+    seed: int = 1,
+    task: str = "double_integrator",
 ) -> str:
     """
     Pretrain value function using Bellman equation:
@@ -54,6 +55,7 @@ def pretrain_value(
         log_dir: Directory for tensorboard logs
         device: Device to train on
         seed: Random seed for reproducibility
+        task: Task name for saving model (e.g., "pendulum", "double_integrator")
     Returns:
         log_path: Path to saved model and logs
     """
@@ -118,7 +120,7 @@ def pretrain_value(
         writer.add_scalar('pretrain/predicted_feasible_rate', predicted_feasible, i)
     
     # Save model
-    torch.save(V_model.state_dict(), os.path.join("../../models/double_integrator/", 'V_pretrain.pth'))
+    torch.save(V_model.state_dict(), os.path.join(f"../../models/{task}/", 'V_pretrain.pth'))
     writer.close()
     
     return log_path

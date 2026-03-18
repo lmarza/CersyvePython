@@ -54,7 +54,8 @@ log_path = train_dynamics(
     apa_coef=1e-4,
     log_dir='../../logs/double_integrator/',
     device=device,
-    seed=seed
+    seed=seed,
+    task="double_integrator"
 )
 
 print(f"\nTraining complete!")

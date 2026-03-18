@@ -56,7 +56,8 @@ def finetune_value_w_MILP(
     eval_every: int = 10,
     save_every: int = 1000,
     device: str = 'cpu',
-    seed: int = 42
+    seed: int = 42,
+    task: str = "double_integrator",
 ) -> str:
     """
     Fine-tune value function with MILP formal verification.
@@ -103,7 +104,7 @@ def finetune_value_w_MILP(
         save_every: Save model every N iterations
         device: Device to train on
         seed: Random seed for reproducibility
-
+        task: Task name for saving model (e.g., "pendulum", "double_integrator")
     Returns:
         log_path: Path to saved model and logs
     """
@@ -285,13 +286,13 @@ def finetune_value_w_MILP(
                 writer.add_scalar('finetune/milp_inconclusive', 1, i)
 
     # Save final model
-    torch.save(V_model.state_dict(), os.path.join("../../models/double_integrator/", 'V_finetune_milp.pth'))
+    torch.save(V_model.state_dict(), os.path.join(f"../../models/{task}/", f'V_finetune_milp_{seed}.pth'))
     writer.close()
 
     if formally_verified:
-        print(f"\nTraining complete — model FORMALLY VERIFIED. Saved to models/double_integrator/")
+        print(f"\nTraining complete — model FORMALLY VERIFIED. Saved to models/{task}/")
     else:
-        print(f"\nTraining complete (max_iter reached). Model saved to models/double_integrator/")
+        print(f"\nTraining complete (max_iter reached). Model saved to models/{task}/")
 
     V_model.eval()
     X = uniform(x_low, x_high, 100_000)
@@ -357,9 +358,9 @@ def finetune_value_enum_MILP(
     log_dir: Optional[str] = None,
     eval_every: int = 100,
     save_every: int = 5000,
-    save_path: Optional[str] = None,
     device: str = 'cpu',
-    seed: int = 42
+    seed: int = 42,
+    task: str = "double_integrator",
 ) -> str:
     """
     Fine-tune value function using **enumeration-based search + MILP verification**.
@@ -425,9 +426,9 @@ def finetune_value_enum_MILP(
         log_dir: Directory for TensorBoard logs / checkpoints
         eval_every: Log feasible-rate every N iterations
         save_every: Save a checkpoint every N iterations
-        save_path: Final model save path (default: ``log_dir/../V_finetune_enum_milp.pth``)
         device: Torch device
         seed: Random seed
+        task: Task name for saving model (e.g., "pendulum", "double_integrator")
 
     Returns:
         log_path: Directory containing logs and checkpoints
@@ -557,6 +558,7 @@ def finetune_value_enum_MILP(
                 tqdm.write(f"  [iter {i}] Enumeration: no unsafe regions found.")
 
         # ── 2. Refill buffer from known regions (cheap) ───────────
+        region_refilled = False
         if len(buffer) < refill_threshold and len(unsafe_regions) > 0:
             X_cand = sample_from_regions(
                 unsafe_regions, n_samples=enum_n_samples, digits_to_consider=0
@@ -572,6 +574,7 @@ def finetune_value_enum_MILP(
                 n_push = min(n_found, len(buffer.vacant))
                 if n_push > 0:
                     buffer.push(X_cand[:, ce][:, :n_push])
+                    region_refilled = True
             else:
                 # Regions no longer productive
                 enum_stale = True
@@ -580,8 +583,9 @@ def finetune_value_enum_MILP(
             writer.add_scalar('enum/refill_found', n_found, i)
 
         # ── 3. Neighbourhood fallback (buffer empty, any time) ────
-        #   No longer gated on enum_stale — always try when buffer
-        #   is empty to avoid dead-zone iterations.
+        #   Fallback fills the buffer so gradient steps aren't wasted,
+        #   but its violations do NOT reset the skip counter.  Only
+        #   region-refill (step 2) counts as structured progress.
         if len(buffer) == 0:
             n_added = _neighbourhood_fallback()
             if n_added > 0:
@@ -590,7 +594,14 @@ def finetune_value_enum_MILP(
 
         # ── 4. Single gradient step from buffer ───────────────────
         if len(buffer) > 0:
-            skipped = 0
+            # Only region-refill resets skipped.  Fallback violations
+            # still get gradient steps but the march toward MILP
+            # continues, preventing indefinite stalling on sparse
+            # fallback violations.
+            if region_refilled:
+                skipped = 0
+            else:
+                skipped += 1
 
             n = min(sample_size, len(buffer))
             x, c = buffer.pop(n)
@@ -730,8 +741,7 @@ def finetune_value_enum_MILP(
                 writer.add_scalar('finetune/milp_inconclusive', 1, i)
 
     # ── Save final model ──────────────────────────────────────────
-    if save_path is None:
-        save_path = os.path.join(log_path, 'V_finetune_enum_milp.pth')
+    save_path = os.path.join(f"../../models/{task}/", f'V_finetune_enum_milp_{seed}.pth')
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     torch.save(V_model.state_dict(), save_path)
     writer.close()

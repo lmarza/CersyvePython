@@ -138,7 +138,8 @@ def train_dynamics(
     snr_coef: Tuple[float, float] = (1e-3, 5e-4),
     log_dir: Optional[str] = None,
     device: str = 'cpu',
-    seed: int = 42
+    seed: int = 42,
+    task = "double_integrator",
 ) -> str:
     """
     Train dynamics model f(x,u) to predict dx.
@@ -227,7 +228,7 @@ def train_dynamics(
         writer.add_scalar('dynamics/mean_squared_error', np.mean(mses), epoch)
     
     # Save model
-    torch.save(f_model.state_dict(), os.path.join("../../models/double_integrator/", 'f.pth'))
+    torch.save(f_model.state_dict(), os.path.join(f"../../models/{task}/", 'f.pth'))
     writer.close()
     
     return log_path
@@ -243,7 +244,8 @@ def train_constraint(
     n_iter: int = 100000,
     log_dir: Optional[str] = None,
     device: str = 'cpu',
-    seed: int = 42
+    seed: int = 42,
+    task = "double_integrator",
 ) -> str:
     """
     Train constraint model h(x) to predict safety cost.
@@ -289,7 +291,7 @@ def train_constraint(
         writer.add_scalar('constraint/constraint_satisfying_rate', float((c <= 0).mean()), i)
     
     # Save model
-    torch.save(h_model.state_dict(), os.path.join("../../models/double_integrator/", 'h.pth'))
+    torch.save(h_model.state_dict(), os.path.join(f"../../models/{task}/", 'h.pth'))
     writer.close()
     
     return log_path
