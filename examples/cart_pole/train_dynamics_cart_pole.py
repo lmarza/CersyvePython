@@ -72,14 +72,9 @@ log_path = train_dynamics(
     apa_coef=1e-4,
     log_dir='../../logs/cart_pole/',
     device=device,
-    seed=seed
+    seed=seed,
+    task="cart_pole"
 )
-
-
-
-os.makedirs('../../models/cart_pole/', exist_ok=True)
-torch.save(f_model.state_dict(), '../../models/cart_pole/f.pth')
-print("FORCED SAVE:", os.path.abspath('../../models/cart_pole/f.pth'))
 
 print(f"\nTraining complete!")
 print(f"Model saved to: models/cart_pole/f.pth")
