@@ -525,7 +525,7 @@ def finetune_value_enum_MILP(
         # ── 1. Enumeration search (periodic) ──────────────────────
         #   Run at iter 0, then every enum_freq iterations.
         #   Skip only if regions are still productive (not stale).
-        need_enum = (i == 0) or (i % enum_freq == 0)
+        need_enum = (i == 0) or (i % enum_freq == 0) if refill_threshold > 0 else False
 
         if need_enum:
             wrapper = BinaryDecisionWrapperCBF(
@@ -741,7 +741,7 @@ def finetune_value_enum_MILP(
                 writer.add_scalar('finetune/milp_inconclusive', 1, i)
 
     # ── Save final model ──────────────────────────────────────────
-    save_path = os.path.join(f"../../models/{task}/", f'V_finetune_enum_milp_{seed}.pth')
+    save_path = os.path.join(f"../../models/{task}/", f'V_finetune_enum_milp_{seed}.pth') if refill_threshold > 0 else os.path.join(f"../../models/{task}/", f'V_finetune_only_samples_milp_{seed}.pth')
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     torch.save(V_model.state_dict(), save_path)
     writer.close()
