@@ -78,32 +78,28 @@ class CartPole:
         x_next = np.clip(x_next, CartPole.x_low.reshape(-1, 1), CartPole.x_high.reshape(-1, 1))
         
         return x_next
-    
+
     @staticmethod
     def constraint(x: np.ndarray) -> np.ndarray:
         """
-        Compute constraint value (negative = safe).
-        
+        Compute signed constraint value (negative = safe, zero = boundary, positive = unsafe).
+
         Constraint: max(|y| - y_con, |th| - th_con)
-        
+
         Args:
             x: State [4, N]
-            
+
         Returns:
             h: Constraint value [1, N] (h <= 0 means safe)
         """
         y = x[0, :]
         th = x[1, :]
-        
-        # max(|y| - y_con, 0)
-        h_y = np.maximum(np.abs(y) - CartPole.y_con, 0)
-        
-        # max(|th| - th_con, 0)
-        h_th = np.maximum(np.abs(th) - CartPole.th_con, 0)
-        
-        # Combined constraint
-        h = np.maximum(h_y - h_th, 0) + h_th
-        
+
+        h = np.maximum(
+            np.abs(y) - CartPole.y_con,
+            np.abs(th) - CartPole.th_con
+        )
+
         return h.reshape(1, -1).astype(np.float32)
     
     @staticmethod

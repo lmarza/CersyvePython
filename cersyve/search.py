@@ -259,7 +259,7 @@ def projected_boundary_search(
             x_tmp_t = torch.from_numpy(x_pgd[:, proj_mask]).to(device).requires_grad_(True)
             v_tmp = V_model(x_tmp_t.T).T
             
-            projected = torch.abs(v_tmp[0, :]).cpu().numpy() <= proj_tol
+            projected = torch.abs(v_tmp[0, :]).detach().cpu().numpy() <= proj_tol
             proj_mask_tmp = proj_mask[proj_mask]
             proj_mask_tmp[projected] = False
             proj_mask[proj_mask] = proj_mask_tmp
@@ -272,7 +272,7 @@ def projected_boundary_search(
             v_abs.sum().backward()
             d_tmp = x_tmp_t.grad.cpu().numpy()
             
-            x_pgd[:, proj_mask] = x_pgd[:, proj_mask] - lr * d_tmp
+            x_pgd[:, proj_mask] = x_pgd[:, proj_mask] - lr * d_tmp[:, proj_mask]
             x_pgd[:, proj_mask] = np.clip(
                 x_pgd[:, proj_mask],
                 x_low.reshape(-1, 1),
