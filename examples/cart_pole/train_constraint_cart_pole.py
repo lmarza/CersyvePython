@@ -1,5 +1,5 @@
 """
-Example: Train constraint model for the CartPole system.
+Train constraint model for the CartPole system.
 """
 
 import os

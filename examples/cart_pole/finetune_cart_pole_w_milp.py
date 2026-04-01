@@ -45,9 +45,6 @@ def main():
     # -----------------------------
     # Config
     # -----------------------------
-    print("SYNC TEST 123")
-    print("AUTO UPLOAD OK")
-
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Using device: {device}")
 
@@ -138,11 +135,11 @@ def main():
     # -----------------------------
     # Finetuning config
     # -----------------------------
-    # conf commetata arriva a 6 minuti e 10 secodni totale con 2 minuti e 20 di train e il restante di verifica e tfr = 0,649
+    # conf commetata arriva a 6 minuti e 10 secondi totale con 2 minuti e 20 di train e il restante di verifica e tfr = 0,649
     finetune_config = {
         "lr": 1e-4,
-        "max_iter": 3000, #5000
-        "search_size": 100,
+        "max_iter": 10000, #paper 100000 io 4000
+        "search_size": 100, #paper 1000
         "bnd_ratio": 0.1,
         "bnd_ratio_avg": 0.9,
         "min_bnd_ratio": 0.01,
@@ -156,22 +153,22 @@ def main():
         "direct_discount": 0.5,
         "tol": 1e-4,
         "capacity": 1000,
-        "sample_size": 10,
+        "sample_size": 50, # mio 10
         "search_stop": 100,
         "replay": 1,
-        "max_skip": 30, #50
+        "max_skip": 50, #50
         "reg_method": "ESR",
         "eps_h": 0.01,
         "eps_v": 0.01,
         "reg_coef": 0.1,
-        "milp_timeout": 60, #120
-        "milp_start_iter": 500, #1500
+        "milp_timeout": 90, #120
+        "milp_start_iter": 1200, #1500
         "eval_every": 10,
         "save_every": 1000,
         "milp_box_shrink": 1.0,
-        "milp_box_grow": 1.3, #1.0 -> domani riprovare con 1.0
+        "milp_box_grow": 1.0,
         "milp_box_max": 1.0,
-        "milp_max_inconclusive": 2, #1
+        "milp_max_inconclusive": 1,
     }
 
     print("\nFinetuning (sampling-based + MILP)...")

@@ -1,5 +1,5 @@
 """
-Example: Train dynamics model for the CartPole system.
+Train dynamics model for the CartPole system.
 """
 
 import os

@@ -218,39 +218,39 @@ def main():
     # con seed = [42] si va 5 min e 67%tfr
     #metto i parametri di questo modello così nei commenti per non perdere le modifiche
     finetune_cfg = dict(
-        lr=1e-4,
-        max_iter=5000,#5000
+        lr=7e-5,
+        max_iter=8000,
         tol=1e-4,
 
-        capacity=10000,
-        sample_size=100,
-        replay=1,
-        max_skip=200,#1000 ##500
+        capacity=15000,
+        sample_size=1000,
+        replay=3,
+        max_skip=500,
 
         # Enumeration
-        enum_freq=1000,
-        enum_n_samples=10000, ##20000
-        enum_coverage=70.0,
-        enum_n_trees=500,#200
+        enum_freq=700,
+        enum_n_samples=10000,
+        enum_coverage=80.0,
+        enum_n_trees=300,
         enum_max_depth=20,
-        enum_n_train=30000,#40000
-        refill_threshold=200, ##500
+        enum_n_train=30000,
+        refill_threshold=400,
 
         # Fallback
-        fallback_eval_rounds=2,#5 ##3
-        fallback_eval_samples=30000,#100000 ##50000
-        fallback_n_neighbors=8000,
-        fallback_radius=0.05,
+        fallback_eval_rounds=2,
+        fallback_eval_samples=15000,
+        fallback_n_neighbors=2000,
+        fallback_radius=0.04,
 
         # Regularization
-        search_size=2000,
+        search_size=2500,
         reg_method="ESR",
-        eps_h=0.01,
-        eps_v=0.01,
-        reg_coef=0.1,
+        eps_h=0.015,
+        eps_v=0.015,
+        reg_coef=0.10,
 
         # MILP
-        milp_timeout=120,# 60
+        milp_timeout=90,
 
         # Logging
         log_dir=logs_dir,

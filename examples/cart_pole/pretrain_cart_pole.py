@@ -1,6 +1,5 @@
 """
-Example: Pretrain value function for the CartPole system
-(ALL FLOAT32 + diagnostics + post-pretrain bias calibration).
+Pretrain value function for the CartPole system
 """
 
 import os
@@ -228,7 +227,7 @@ log_path = pretrain_value(
     x_high=x_high,
     gamma=0.9,
     lr=3e-4,
-    batch_size=512,         # was 512 before 1024
+    batch_size=512,
     iter_num=180000,
     weight_decay=0.0,
     penalty="APA",

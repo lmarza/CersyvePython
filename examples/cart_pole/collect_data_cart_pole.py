@@ -1,5 +1,5 @@
 """
-Example: Collect trajectory data for the CartPole system.
+Collect trajectory data for the CartPole system.
 """
 
 import sys

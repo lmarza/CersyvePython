@@ -1,7 +1,8 @@
-"""Enumerate probable unsafe regions for CartPole and visualize them on a 2D slice."""
+"""Enumerate probable unsafe regions for CartPole and visualize them like Double Integrator."""
 
 import os
 import sys
+from time import time
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
@@ -23,16 +24,15 @@ from cersyve.enumeration import enumerate_unsafe_regions, BinaryDecisionWrapperC
 # ============================================================
 DEVICE = "cpu"
 
-# Slice shown in plots: x(1)=position, x(3)=angle
+# Visualized slice: x(1)=position, x(3)=angle
 VIS_DIMS = (0, 2)
 FIXED_STATE = np.array([0.0, 0.0, 0.0, 0.0], dtype=np.float32)
 
-# Tolerance on hidden dims:
+# Hidden dims tolerance:
 # dim 1 = velocity, dim 3 = angular velocity
-# This is the key fix: do not require exact containment of 0.
 HIDDEN_TOL = np.array([0.0, 0.35, 0.0, 0.35], dtype=np.float32)
 
-N_POINTS = 260
+N_POINTS = 200
 HORIZON = 100
 
 PLOTS_DIR = "plots"
@@ -72,24 +72,24 @@ def eval_value(V_model, pts, n_points, device="cpu"):
 
 @torch.no_grad()
 def compute_true_safe_region(pts, h_model, f_pi_model, n_points, horizon=100, device="cpu"):
+    print("Computing true safe region (100-step forward reachability)...")
     true_safe = np.ones(pts.shape[0], dtype=bool)
     X_current = torch.from_numpy(pts.T.astype(np.float32)).to(device)  # [4, N]
 
     for step in range(horizon):
-        h_val = h_model(X_current.T).cpu().numpy().flatten()
+        X_for_h = X_current.T  # [N, 4]
+        h_val = h_model(X_for_h).cpu().numpy().flatten()
         true_safe &= (h_val <= 0.0)
         X_current = f_pi_model(X_current)
 
-        if step % 20 == 0:
-            print(f"  Step {step}/{horizon}: {true_safe.mean() * 100:.2f}% points remain safe")
-
-    return true_safe.reshape(n_points, n_points)
+    true_safe = true_safe.reshape(n_points, n_points)
+    print(f"True safe region computed: {true_safe.mean() * 100:.2f}% of states")
+    return true_safe
 
 
 def project_region_to_slice(region_low, region_high, dims=(0, 2), fixed_state=None, hidden_tol=None):
     """
-    Project a 4D box to the 2D slice if it is compatible with the fixed hidden dimensions.
-    Compatibility is checked with tolerance on hidden dims.
+    Project a 4D box to the 2D slice if compatible with fixed hidden dimensions.
     """
     if fixed_state is None:
         fixed_state = np.zeros(CartPole.x_dim, dtype=np.float32)
@@ -113,7 +113,7 @@ def project_region_to_slice(region_low, region_high, dims=(0, 2), fixed_state=No
 
 
 def load_models(device="cpu"):
-    print("Loading CartPole data and models...")
+    print("\nLoading CartPole data and models...")
 
     data_npz = np.load("../../data/cart_pole_data.npz")
     data = {}
@@ -124,62 +124,59 @@ def load_models(device="cpu"):
     x_low = np.asarray(CartPole.x_low, dtype=np.float32)
     x_high = np.asarray(CartPole.x_high, dtype=np.float32)
 
-    # h
+    # constraint model
     h_model = create_mlp(CartPole.x_dim, 1, [32, 32])
     h_model = load_state(h_model, "../../models/cart_pole/h.pth", device)
 
-    # f
+    # dynamics model
     f_model = create_mlp(CartPole.x_dim + CartPole.u_dim, CartPole.x_dim, [64, 64])
     f_model = load_state(f_model, "../../models/cart_pole/f.pth", device)
 
-    # pi
+    # policy
     pi_model = CartPole.create_policy().to(device).float().eval()
 
-    # closed loop
+    # closed-loop dynamics
     f_pi_model = create_closed_loop_dynamics_model(
         f_model, pi_model, data, x_low, x_high, CartPole.u_dim
     ).to(device).float().eval()
 
-    # pretrained V
+    # pretrained value function
     V_pre = create_mlp(CartPole.x_dim, 1, [64, 64])
     V_pre = load_state(V_pre, "../../models/cart_pole/V_pretrain.pth", device)
 
-    print("✓ All models loaded successfully\n")
+    print("✓ All models loaded successfully")
     return x_low, x_high, h_model, f_pi_model, V_pre
 
 
 # ============================================================
-# Main
+# Enumeration
 # ============================================================
-def main():
-    x_low, x_high, h_model, f_pi_model, V_pre = load_models(device=DEVICE)
+def enumeration_unsafe_regions_cartpole(V_model, h_model, f_pi_model, x_low, x_high, device):
+    print("=" * 80)
+    print("Enumerating Probable Unsafe Regions - CartPole")
+    print("=" * 80)
 
     wrapper_model = BinaryDecisionWrapperCBF(
-        V_model=V_pre,
+        V_model=V_model,
         h_model=h_model,
         f_pi_model=f_pi_model,
-    ).to(DEVICE).float().eval()
+    ).to(device).float().eval()
 
     input_domain = np.stack([x_low, x_high], axis=1).astype(np.float32)
 
-    print("=" * 70)
-    print("Enumerating Probable Unsafe Regions - CartPole")
-    print("=" * 70)
-
-    # IMPORTANT:
-    # We enumerate unsafe regions in 4D, then project those near the chosen slice.
+    start_time = time()
     unsafe_regions, stats = enumerate_unsafe_regions(
         wrapper_model=wrapper_model,
         input_domain=input_domain,
-        n_training_samples=60000,
-        n_decision_trees=2500,
-        max_depth=14,
+        n_training_samples=200000,
+        n_decision_trees=3000,
+        max_depth=18,
         heuristic="gini",
         digits_to_consider=0,
-        wilks_filtering=True,
+        wilks_filtering=False,
         wilks_samples=3500,
-        sample_size_evaluation=10000,
-        desired_coverage=70.0,
+        sample_size_evaluation=50000,
+        desired_coverage=40.0,
         enumerate_safe_regions=False,
         incremental_coverage=True,
         verify_safe_regions_with_pgd=False,
@@ -188,19 +185,30 @@ def main():
         pgd_eps=0.1,
         seed=42,
         verbose=True,
-        device=DEVICE,
+        device=device,
     )
 
-    num_regions = len(unsafe_regions)
-    coverage_pct = float(stats.get("coverage", stats.get("coverage_pct", 0.0)))
-    error_pct = float(stats.get("error_rate", stats.get("error_pct", 0.0)))
+    elapsed = time() - start_time
 
-    print("\nEnumeration results")
-    print(f"  Regions found: {num_regions}")
-    print(f"  Coverage: {coverage_pct:.2f}%")
-    print(f"  Error rate: {error_pct:.2f}%")
+    print("\n" + "=" * 80)
+    print("Enumeration Results")
+    print("=" * 80)
+    print(f"Number of unsafe regions found: {len(unsafe_regions)}")
+    print(f"Coverage of unsafe samples: {stats.get('coverage', 0.0):.2f}%")
+    print(f"Error rate: {stats.get('error_rate', 0.0):.2f}%")
+    print(f"Computation time: {elapsed:.2f} seconds - {elapsed/60:.2f} minutes")
 
-    # Build 2D slice
+    return unsafe_regions, stats, input_domain
+
+
+# ============================================================
+# Visualization
+# ============================================================
+def visualize_cartpole(h_model, V_model, f_pi_model, unsafe_regions, stats, x_low, x_high):
+    print("\n" + "=" * 80)
+    print("Creating Visualization")
+    print("=" * 80)
+
     xs, ys, X1, X2, pts = build_slice_grid(
         x_low=x_low,
         x_high=x_high,
@@ -209,11 +217,10 @@ def main():
         n_points=N_POINTS,
     )
 
-    # Evaluate pretrained V on the slice
-    V_vals = eval_value(V_pre, pts, N_POINTS, DEVICE)
+    # Pretrained value function on slice
+    V_pre = eval_value(V_model, pts, N_POINTS, DEVICE)
 
-    # True safe region on the slice
-    print("\nComputing true safe region (100-step forward simulation on slice)...")
+    # True safe region
     true_safe_region = compute_true_safe_region(
         pts=pts,
         h_model=h_model,
@@ -223,16 +230,12 @@ def main():
         device=DEVICE,
     )
 
-    # ------------------------------------------------------------
-    # Project enumerated unsafe 4D regions onto the slice
-    # ------------------------------------------------------------
+    # Project 4D unsafe regions to 2D slice
     projected_rects = []
     enum_unsafe_mask = np.zeros((N_POINTS, N_POINTS), dtype=bool)
 
     for reg in unsafe_regions:
         region = np.asarray(reg, dtype=np.float32)
-
-        # Expect shape [4,2]
         if region.shape != (CartPole.x_dim, 2):
             continue
 
@@ -250,28 +253,20 @@ def main():
         if proj is None:
             continue
 
-        x0, x1, y0, y1 = proj
-        projected_rects.append((x0, x1, y0, y1))
+        x_min, x_max, y_min, y_max = proj
+        projected_rects.append((x_min, x_max, y_min, y_max))
 
-        mask = (X1 >= x0) & (X1 <= x1) & (X2 >= y0) & (X2 <= y1)
+        mask = (X1 >= x_min) & (X1 <= x_max) & (X2 >= y_min) & (X2 <= y_max)
         enum_unsafe_mask |= mask
 
-    projected_count = len(projected_rects)
+    # Pretrained unsafe region
+    pretrained_unsafe = (V_pre > 0)
 
-    # ------------------------------------------------------------
-    # Coverage map logic
-    # Compare:
-    #   pretrained unsafe prediction   <->   enumerated unsafe projection
-    #
-    # pretrained_unsafe = V_pre > 0
-    # ------------------------------------------------------------
-    pretrained_unsafe = (V_vals > 0.0)
-
-    # Labels:
-    # 0 -> both safe
-    # 1 -> pretrained only
-    # 2 -> enumerated only
-    # 3 -> both unsafe
+    # Coverage map
+    # 0: both safe
+    # 1: pretrained only
+    # 2: enumerated only
+    # 3: both unsafe
     coverage_map = np.zeros((N_POINTS, N_POINTS), dtype=np.int32)
     coverage_map[(~pretrained_unsafe) & (~enum_unsafe_mask)] = 0
     coverage_map[(pretrained_unsafe) & (~enum_unsafe_mask)] = 1
@@ -281,129 +276,145 @@ def main():
     # ------------------------------------------------------------
     # Plot
     # ------------------------------------------------------------
-    fig, axes = plt.subplots(1, 2, figsize=(17, 7.5))
+    fig, axes = plt.subplots(1, 2, figsize=(16, 7))
 
-    # ---------- Left panel ----------
+    # ---------- Plot 1 ----------
     ax = axes[0]
+    contour = ax.contourf(X1, X2, V_pre, levels=20, cmap="YlGnBu", alpha=0.8)
+    plt.colorbar(contour, ax=ax, label="Value V(x)")
 
-    cf = ax.contourf(X1, X2, V_vals, levels=28, cmap="YlGnBu", alpha=0.86)
-    cbar = plt.colorbar(cf, ax=ax)
-    cbar.set_label("Pre-trained Value V(x)", fontsize=13)
-
+    # true safe boundary
     ax.contour(
         X1, X2, true_safe_region.astype(float),
-        levels=[0.5],
-        colors="black",
-        linewidths=2.4
-    )
-    ax.contour(
-        X1, X2, V_vals,
-        levels=[0.0],
-        colors="blue",
-        linewidths=2.6
+        levels=[0.5], colors="black", linewidths=2.5, linestyles="-"
     )
 
-    for (x0, x1, y0, y1) in projected_rects:
-        ax.add_patch(
-            Rectangle(
-                (x0, y0),
-                x1 - x0,
-                y1 - y0,
-                facecolor="red",
-                edgecolor="red",
-                alpha=0.22,
-                linewidth=1.0,
-            )
+    # pretrained boundary
+    ax.contour(
+        X1, X2, V_pre,
+        levels=[0.0], colors="blue", linewidths=2.5, linestyles="-"
+    )
+
+    # projected unsafe boxes
+    for (x_min, x_max, y_min, y_max) in projected_rects:
+        rect = Rectangle(
+            (x_min, y_min),
+            x_max - x_min,
+            y_max - y_min,
+            linewidth=2,
+            edgecolor="red",
+            facecolor="red",
+            alpha=0.35
         )
+        ax.add_patch(rect)
 
     legend_elements = [
-        Line2D([0], [0], color="black", lw=2.4, label="True safe region (100-step)"),
-        Line2D([0], [0], color="blue", lw=2.6, label="Pre-trained V=0 boundary"),
-        Rectangle((0, 0), 1, 1, facecolor="red", edgecolor="red", alpha=0.22,
-                  label="Projected enumerated unsafe regions"),
+        Line2D([0], [0], color="black", lw=2.5, label="True safe region (100-step)"),
+        Line2D([0], [0], color="blue", lw=2.5, label="Pre-trained V=0 boundary"),
+        Rectangle((0, 0), 1, 1, facecolor="red", edgecolor="red", alpha=0.35,
+                  label=f"Projected unsafe regions ({len(projected_rects)})")
     ]
-    ax.legend(handles=legend_elements, loc="upper right", fontsize=11, framealpha=0.95)
+    ax.legend(handles=legend_elements, loc="upper right", fontsize=10, framealpha=0.95)
 
+    ax.set_xlabel("Cart Position", fontsize=12)
+    ax.set_ylabel("Pole Angle", fontsize=12)
     ax.set_title(
-        f"CartPole Pre-trained V(x) with Enumerated Unsafe Regions\n"
-        f"Projected regions shown: {projected_count}",
-        fontsize=17,
+        f"Pre-trained V(x) with Enumerated Unsafe Regions\n({len(projected_rects)} projected regions shown)",
+        fontsize=13,
         fontweight="bold"
     )
-    ax.set_xlabel("x(1) - Cart Position", fontsize=14)
-    ax.set_ylabel("x(3) - Pole Angle", fontsize=14)
-    ax.grid(True, alpha=0.25)
-    ax.set_xlim(float(x_low[0]), float(x_high[0]))
-    ax.set_ylim(float(x_low[2]), float(x_high[2]))
+    ax.grid(True, alpha=0.3)
+    ax.set_xlim(float(x_low[VIS_DIMS[0]]), float(x_high[VIS_DIMS[0]]))
+    ax.set_ylim(float(x_low[VIS_DIMS[1]]), float(x_high[VIS_DIMS[1]]))
+    ax.set_aspect("auto")
 
-    # ---------- Right panel ----------
+    # ---------- Plot 2 ----------
     ax = axes[1]
 
-    # Explicit, readable colors
-    # 0 both safe      -> light gray
-    # 1 pretrained only-> blue
-    # 2 enumerated only-> red
-    # 3 both unsafe    -> dark red
-    cmap = ListedColormap([
-        "#e6e6e6",  # both safe
-        "#0000ff",  # pretrained only
-        "#ff2a2a",  # enumerated only
-        "#a00000",  # both unsafe
-    ])
+    cmap = ListedColormap(["white", "blue", "red", "darkred"])
     norm = BoundaryNorm([-0.5, 0.5, 1.5, 2.5, 3.5], cmap.N)
 
-    im = ax.imshow(
+    img = ax.imshow(
         coverage_map,
+        extent=[X1.min(), X1.max(), X2.min(), X2.max()],
         origin="lower",
-        extent=[xs.min(), xs.max(), ys.min(), ys.max()],
-        aspect="auto",
-        interpolation="nearest",
         cmap=cmap,
         norm=norm,
+        aspect="auto",
+        interpolation="nearest"
     )
 
     ax.contour(
         X1, X2, true_safe_region.astype(float),
-        levels=[0.5],
-        colors="black",
-        linewidths=2.2
+        levels=[0.5], colors="black", linewidths=2.5, linestyles="-"
     )
 
-    cbar = plt.colorbar(im, ax=ax, ticks=[0, 1, 2, 3])
-    cbar.ax.set_yticklabels([
-        "Both safe",
-        "Pre-trained only",
-        "Enumerated only",
-        "Both unsafe",
-    ])
+    cbar = plt.colorbar(img, ax=ax, ticks=[0, 1, 2, 3])
+    cbar.ax.set_yticklabels(["Both safe", "Pre-trained only", "Enumerated only", "Both unsafe"])
 
+    ax.set_xlabel("Cart Position", fontsize=12)
+    ax.set_ylabel("Pole Angle", fontsize=12)
     ax.set_title(
-        f"Coverage Map: Pre-trained vs Enumerated\n"
-        f"(Error: {error_pct:.2f}%)",
-        fontsize=17,
+        f"Coverage Map: Pre-trained vs Enumerated\n(Error: {stats.get('error_rate', 0.0):.2f}%)",
+        fontsize=13,
         fontweight="bold"
     )
-    ax.set_xlabel("x(1) - Cart Position", fontsize=14)
-    ax.set_ylabel("x(3) - Pole Angle", fontsize=14)
-    ax.grid(True, alpha=0.25)
-    ax.set_xlim(float(x_low[0]), float(x_high[0]))
-    ax.set_ylim(float(x_low[2]), float(x_high[2]))
+    ax.grid(True, alpha=0.3)
+    ax.set_xlim(float(x_low[VIS_DIMS[0]]), float(x_high[VIS_DIMS[0]]))
+    ax.set_ylim(float(x_low[VIS_DIMS[1]]), float(x_high[VIS_DIMS[1]]))
+    ax.set_aspect("auto")
 
-    fig.suptitle(
-        "CartPole: Enumerated Probable Unsafe Regions\n"
-        f"Coverage: {coverage_pct:.2f}% | Regions: {num_regions} | "
-        f"Slice dims={VIS_DIMS}, fixed_state={FIXED_STATE.tolist()}",
-        fontsize=20,
-        fontweight="bold"
+    plt.suptitle(
+        f"CartPole: Enumerated Probable Unsafe Regions\n"
+        f"Coverage: {stats.get('coverage', 0.0):.2f}% | Regions: {len(unsafe_regions)}",
+        fontsize=15,
+        fontweight="bold",
+        y=0.98
     )
 
-    out_file = os.path.join(PLOTS_DIR, "enumeration_results_cart_pole.png")
     plt.tight_layout()
-    plt.savefig(out_file, dpi=320, bbox_inches="tight")
-    plt.close(fig)
 
-    print(f"\nVisualization saved to: {out_file}")
+    out_path = os.path.join(PLOTS_DIR, "enumeration_results_cart_pole.png")
+    plt.savefig(out_path, dpi=300, bbox_inches="tight")
+    print(f"\n✓ Visualization saved to {out_path}")
+
+    # save regions
+    print("\n" + "=" * 80)
+    print("Saving Enumerated Regions")
+    print("=" * 80)
+    regions_save_path = "../../examples/cart_pole/enumerated_unsafe_regions_cart_pole.npz"
+    np.savez(
+        regions_save_path,
+        unsafe_regions=np.array(unsafe_regions, dtype=object),
+        stats=stats,
+        projected_rects=np.array(projected_rects, dtype=np.float32) if len(projected_rects) > 0 else np.empty((0, 4), dtype=np.float32)
+    )
+    print(f"✓ Regions saved to: {regions_save_path}")
 
 
+# ============================================================
+# Main
+# ============================================================
 if __name__ == "__main__":
-    main()
+    x_low, x_high, h_model, f_pi_model, V_pre = load_models(device=DEVICE)
+    unsafe_regions, stats, input_domain = enumeration_unsafe_regions_cartpole(
+        V_model=V_pre,
+        h_model=h_model,
+        f_pi_model=f_pi_model,
+        x_low=x_low,
+        x_high=x_high,
+        device=DEVICE,
+    )
+    visualize_cartpole(
+        h_model=h_model,
+        V_model=V_pre,
+        f_pi_model=f_pi_model,
+        unsafe_regions=unsafe_regions,
+        stats=stats,
+        x_low=x_low,
+        x_high=x_high,
+    )
+
+    print("\n" + "=" * 80)
+    print("Done!")
+    print("=" * 80)

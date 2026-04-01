@@ -29,23 +29,20 @@ DEVICE = "cpu"
 VIS_DIMS = (0, 2)  # position vs angle
 FIXED_STATE = np.array([0.0, 0.0, 0.0, 0.0], dtype=np.float32)
 
-N_POINTS = 260
+N_POINTS = 220
 HORIZON = 100
-COUNTEREXAMPLE_SAMPLES = 28
+COUNTEREXAMPLE_SAMPLES = 30
 
-# Filter points that are reasonably close to the displayed slice
+# Tolerance to keep projected counterexamples visually meaningful on the slice
 VEL_THR = 0.35
 ANGVEL_THR = 0.35
-
-PLOTS_DIR = "plots"
-os.makedirs(PLOTS_DIR, exist_ok=True)
 
 
 # ============================================================
 # Utilities
 # ============================================================
 def load_state(model, path, device="cpu"):
-    state_dict = torch.load(path, map_location=device)
+    state_dict = torch.load(path, map_location=device, weights_only=True)
     model.load_state_dict(state_dict)
     model.to(device).float().eval()
     return model
@@ -68,7 +65,7 @@ def build_slice_grid(x_low, x_high, dims=(0, 2), fixed_state=None, n_points=200)
 
 
 def project_states(states_4d, dims=(0, 2)):
-    """Project [4, N] states to [2, N] on the chosen slice dims."""
+    """Project [4, N] states to [2, N] on selected dims."""
     if states_4d.shape[1] == 0:
         return np.empty((2, 0), dtype=np.float32)
     return states_4d[dims, :]
@@ -76,18 +73,20 @@ def project_states(states_4d, dims=(0, 2)):
 
 def compute_tfr(V_model, h_model, f_pi_model, n_samples=100_000, horizon=100, device="cpu",
                 return_missed=False):
-    """Compute True Feasible Rate on the full 4D state space."""
-    V_model.eval()
+    """
+    Compute the True Feasible Rate (TFR) on the full 4D state space.
 
+    TFR = (# states with V(x)<=0 AND truly feasible) / (# truly feasible states)
+    """
+    V_model.eval()
     X = uniform(CartPole.x_low, CartPole.x_high, n_samples).astype(np.float32)  # [4, N]
-    X_t = torch.from_numpy(X).to(device)
+    X_t = torch.from_numpy(X).to(device)  # [4, N]
 
     with torch.no_grad():
         V = V_model(X_t.T).T.cpu().numpy()[0, :]  # [N]
 
         truly_feasible = np.ones(n_samples, dtype=bool)
         X_current = X_t.clone()  # [4, N]
-
         for _ in range(horizon):
             h_current = h_model(X_current.T).T.cpu().numpy()[0, :]
             truly_feasible &= (h_current <= 0)
@@ -101,9 +100,9 @@ def compute_tfr(V_model, h_model, f_pi_model, n_samples=100_000, horizon=100, de
     tfr = n_identified / max(n_truly_feasible, 1)
     result = {
         "tfr": tfr,
-        "n_truly_feasible": int(n_truly_feasible),
-        "n_identified": int(n_identified),
-        "n_missed": int(missed.sum()),
+        "n_truly_feasible": n_truly_feasible,
+        "n_identified": n_identified,
+        "n_missed": missed.sum(),
         "truly_feasible_rate": n_truly_feasible / n_samples,
     }
     if return_missed:
@@ -134,7 +133,8 @@ def eval_next_value(V_model, pts, f_pi_model, n_points, device="cpu"):
 
 @torch.no_grad()
 def compute_true_safe_region(pts, h_model, f_pi_model, n_points, horizon=100, device="cpu"):
-    """Compute true safe region on the chosen slice by 100-step simulation."""
+    """Compute true safe region on the 2D slice by 100-step simulation."""
+    print("Computing true safe region (100-step forward reachability)...")
     true_safe_region = np.ones(pts.shape[0], dtype=bool)
     X_current = torch.from_numpy(pts.T.astype(np.float32)).to(device)  # [4, N]
 
@@ -149,9 +149,53 @@ def compute_true_safe_region(pts, h_model, f_pi_model, n_points, horizon=100, de
     return true_safe_region.reshape(n_points, n_points)
 
 
-def load_shared_models(device="cpu"):
-    """Load data + h + f + pi + closed-loop + V_pre."""
-    print("Loading CartPole data and shared models...")
+def filter_counterexamples_close_to_slice(states_4d, n_keep=30, vel_thr=0.35, angvel_thr=0.35):
+    """
+    Keep counterexamples visually meaningful for the displayed slice.
+    Priority:
+    - small |velocity|
+    - small |angular velocity|
+    """
+    if states_4d.shape[1] == 0:
+        return states_4d
+
+    x = states_4d.copy()  # [4, N]
+    mask = (np.abs(x[1, :]) <= vel_thr) & (np.abs(x[3, :]) <= angvel_thr)
+    filtered = x[:, mask]
+
+    # fallback if too few survive
+    if filtered.shape[1] < max(6, n_keep // 3):
+        filtered = x
+
+    score = np.abs(filtered[1, :]) + np.abs(filtered[3, :])
+
+    if filtered.shape[1] > n_keep:
+        order = np.argsort(score)
+        filtered = filtered[:, order[:n_keep]]
+
+    # sort by position for cleaner visual order
+    order_x = np.argsort(filtered[0, :])
+    filtered = filtered[:, order_x]
+
+    return filtered
+
+
+def sample_counterexamples(mask, X_points_4d, n_samples=30):
+    """Sample points from a boolean mask over the slice grid."""
+    indices = np.where(mask.flatten())[0]
+    if len(indices) == 0:
+        return np.empty((CartPole.x_dim, 0), dtype=np.float32)
+
+    rng = np.random.default_rng(42)
+    if len(indices) > n_samples * 6:
+        indices = rng.choice(indices, n_samples * 6, replace=False)
+
+    return X_points_4d[indices].T  # [4, K]
+
+
+def load_models(device="cpu"):
+    """Load CartPole data + h + f + pi + closed-loop + V_pre."""
+    print("Loading CartPole models...")
 
     data_path = "../../data/cart_pole_data.npz"
     data_npz = np.load(data_path)
@@ -160,6 +204,7 @@ def load_shared_models(device="cpu"):
         arr = data_npz[key]
         data[key] = arr.astype(np.float32) if np.issubdtype(arr.dtype, np.floating) else arr
 
+    # Shared ranges
     x_low = np.asarray(CartPole.x_low, dtype=np.float32)
     x_high = np.asarray(CartPole.x_high, dtype=np.float32)
 
@@ -179,77 +224,32 @@ def load_shared_models(device="cpu"):
         f_model, pi_model, data, x_low, x_high, CartPole.u_dim
     ).to(device).float().eval()
 
-    # Pretrained value
+    # Pretrained value function
     V_pretrain = create_mlp(CartPole.x_dim, 1, [64, 64])
     V_pretrain = load_state(V_pretrain, "../../models/cart_pole/V_pretrain.pth", device)
 
-    print("✓ Shared models loaded\n")
+    print("✓ All models loaded successfully")
     return x_low, x_high, h_model, f_pi_model, V_pretrain
 
 
-def filter_and_order_counterexamples(states_4d, n_keep=28, vel_thr=0.35, angvel_thr=0.35):
-    """
-    Make CartPole counterexamples look more like DI:
-    - keep points close to the displayed slice in hidden dims
-    - if too many remain, keep the best ones
-    - sort by x-position for a visually linear trend
-    """
-    if states_4d.shape[1] == 0:
-        return states_4d
-
-    x = states_4d.copy()  # [4, N]
-
-    # hidden dims are 1=velocity and 3=angular velocity
-    mask = (np.abs(x[1, :]) <= vel_thr) & (np.abs(x[3, :]) <= angvel_thr)
-
-    filtered = x[:, mask]
-
-    # fallback if filtering is too strict
-    if filtered.shape[1] < max(6, n_keep // 3):
-        filtered = x
-
-    # score = closeness to the slice in hidden dims
-    score = np.abs(filtered[1, :]) + np.abs(filtered[3, :])
-
-    if filtered.shape[1] > n_keep:
-        order = np.argsort(score)
-        filtered = filtered[:, order[:n_keep]]
-
-    # sort by x-position to imitate the linear progression seen in DI
-    order_x = np.argsort(filtered[0, :])
-    filtered = filtered[:, order_x]
-
-    return filtered
-
-
-def sample_counterexamples(mask, X_points_4d, n_samples=30):
-    """Sample points from a boolean mask."""
-    indices = np.where(mask.flatten())[0]
-    if len(indices) == 0:
-        return np.empty((CartPole.x_dim, 0), dtype=np.float32)
-
-    if len(indices) > n_samples * 6:
-        rng = np.random.default_rng(42)
-        indices = rng.choice(indices, n_samples * 6, replace=False)
-
-    return X_points_4d[indices].T  # [4, K]
-
-
+# ============================================================
+# Main visualization
+# ============================================================
 def visualize_comparison(
     fine_tune_model_path="../../models/cart_pole/V_finetune_milp.pth",
-    name_file="plots/comparison_visualization_milp.png",
-    title_suffix="MILP"
+    name_file="plots/comparison_visualization_milp_cart_pole.png"
 ):
     device = DEVICE
 
-    x_low, x_high, h_model, f_pi_model, V_pretrain = load_shared_models(device=device)
+    # Load models
+    x_low, x_high, h_model, f_pi_model, V_pretrain = load_models(device=device)
 
     # Load finetuned value function
     V_finetune = create_mlp(CartPole.x_dim, 1, [64, 64])
     print(f"Loading finetuned value function from {fine_tune_model_path}...")
     V_finetune = load_state(V_finetune, fine_tune_model_path, device)
 
-    # Build slice grid
+    # Build 2D slice
     _, _, X1, X2, pts = build_slice_grid(
         x_low=x_low,
         x_high=x_high,
@@ -259,16 +259,16 @@ def visualize_comparison(
     )
 
     # Compute values
-    print("Computing value functions and constraints on the CartPole slice...")
+    print("Computing value functions and constraints...")
     with torch.no_grad():
         H = eval_constraint(h_model, pts, N_POINTS, device)
         V_pre = eval_value(V_pretrain, pts, N_POINTS, device)
         V_fine = eval_value(V_finetune, pts, N_POINTS, device)
+
         V_next_pre = eval_next_value(V_pretrain, pts, f_pi_model, N_POINTS, device)
         V_next_fine = eval_next_value(V_finetune, pts, f_pi_model, N_POINTS, device)
 
-    # Compute true safe region
-    print("Computing true safe region (100-step forward reachability)...")
+    # Compute true safe region by forward simulation
     true_safe_region = compute_true_safe_region(
         pts=pts,
         h_model=h_model,
@@ -277,17 +277,21 @@ def visualize_comparison(
         horizon=HORIZON,
         device=device,
     )
-    print(f"True safe region computed: {true_safe_region.mean() * 100:.2f}% of slice states\n")
+    print(f"True safe region computed: {true_safe_region.mean() * 100:.2f}% of slice states")
+    print()
 
-    # ============================================================
-    # Counterexamples -- USE PRETRAIN, like DI
-    # ============================================================
+    # ------------------------------------------------------------
+    # Counterexamples on the displayed slice
+    # ------------------------------------------------------------
+    # Constraint counterexamples: V <= 0 but H > 0
     constraint_counter_pre = (V_pre <= 0) & (H > 0)
     constraint_counter_fine = (V_fine <= 0) & (H > 0)
 
+    # Invariance counterexamples: V <= 0 but V_next > 0
     invariance_counter_pre = (V_pre <= 0) & (V_next_pre > 0)
     invariance_counter_fine = (V_fine <= 0) & (V_next_fine > 0)
 
+    # Use PRETRAIN counterexamples for the plot, like DI
     all_pre_counter_mask = constraint_counter_pre | invariance_counter_pre
     all_pre_counter_raw = sample_counterexamples(
         all_pre_counter_mask,
@@ -295,17 +299,16 @@ def visualize_comparison(
         n_samples=COUNTEREXAMPLE_SAMPLES,
     )  # [4, K_raw]
 
-    # Filter and order for a cleaner, DI-like figure
-    all_pre_counter = filter_and_order_counterexamples(
+    all_pre_counter = filter_counterexamples_close_to_slice(
         all_pre_counter_raw,
         n_keep=COUNTEREXAMPLE_SAMPLES,
         vel_thr=VEL_THR,
         angvel_thr=ANGVEL_THR,
-    )
+    )  # [4, K]
 
     all_pre_counter_2d = project_states(all_pre_counter, dims=VIS_DIMS)
 
-    # Next states of those counterexamples
+    # Compute next states for the selected counterexamples
     if all_pre_counter.shape[1] > 0:
         with torch.no_grad():
             counter_torch = torch.from_numpy(all_pre_counter.astype(np.float32)).to(device)
@@ -314,16 +317,21 @@ def visualize_comparison(
     else:
         counter_next_2d = np.empty((2, 0), dtype=np.float32)
 
-    # TFR
-    trf_fine = compute_tfr(V_finetune, h_model, f_pi_model, n_samples=100_000, horizon=100)["tfr"]
+    # Compute TFR
+    trf_fine = compute_tfr(
+        V_finetune, h_model, f_pi_model, n_samples=100_000, horizon=100, device=device
+    )["tfr"]
 
+    # ------------------------------------------------------------
     # Plot
+    # ------------------------------------------------------------
     fig, ax = plt.subplots(figsize=(10, 8))
 
-    contour = ax.contourf(X1, X2, V_fine, levels=26, cmap="YlGnBu", alpha=0.82)
-    cbar = plt.colorbar(contour, ax=ax)
-    cbar.set_label("Fine-tuned Value V(x)", fontsize=13)
+    # Background heatmap = fine-tuned value
+    contour = ax.contourf(X1, X2, V_fine, levels=22, cmap="YlGnBu", alpha=0.8)
+    cbar = plt.colorbar(contour, ax=ax, label="Fine-tuned Value V(x)")
 
+    # True safe region boundary
     ax.contour(
         X1, X2, true_safe_region.astype(float),
         levels=[0.5],
@@ -332,34 +340,36 @@ def visualize_comparison(
         linestyles="-"
     )
 
+    # Pre-trained boundary
     ax.contour(
         X1, X2, V_pre,
         levels=[0],
         colors="orange",
-        linewidths=2.2,
+        linewidths=2,
         linestyles="-"
     )
 
+    # Fine-tuned boundary
     ax.contour(
         X1, X2, V_fine,
         levels=[0],
         colors="blue",
-        linewidths=2.8,
+        linewidths=3,
         linestyles="-"
     )
 
-    # Counterexamples from PRETRAIN
+    # Pre-training counterexamples
     if all_pre_counter_2d.shape[1] > 0:
         ax.scatter(
             all_pre_counter_2d[0, :],
             all_pre_counter_2d[1, :],
             c="red",
-            s=58,
-            alpha=0.60,
+            s=60,
+            alpha=0.6,
             edgecolors="darkred",
-            linewidth=1.4,
+            linewidth=1.5,
             marker="o",
-            zorder=5,
+            zorder=5
         )
 
     # Next states
@@ -368,51 +378,69 @@ def visualize_comparison(
             counter_next_2d[0, :],
             counter_next_2d[1, :],
             c="darkred",
-            s=58,
-            alpha=0.82,
+            s=60,
+            alpha=0.8,
             edgecolors="black",
-            linewidth=1.3,
+            linewidth=1.5,
             marker="o",
-            zorder=5,
+            zorder=5
         )
 
-        for i in range(all_pre_counter_2d.shape[1]):
+        # Segments from counterexamples to next states
+        for i in range(counter_next_2d.shape[1]):
             ax.plot(
                 [all_pre_counter_2d[0, i], counter_next_2d[0, i]],
                 [all_pre_counter_2d[1, i], counter_next_2d[1, i]],
                 color="darkred",
-                alpha=0.40,
+                alpha=0.45,
                 linewidth=1.0,
-                zorder=4,
+                zorder=4
             )
 
-    ax.set_xlabel("x(1) - Position", fontsize=14)
+    ax.set_xlabel("x(1) - Cart Position", fontsize=14)
     ax.set_ylabel("x(3) - Pole Angle", fontsize=14)
     ax.set_title(
-        f"CartPole: Pre-trained vs Fine-tuned Value Functions ({title_suffix})",
-        fontsize=17,
+        "CartPole: Pre-trained vs Fine-tuned Value Functions",
+        fontsize=15,
         fontweight="bold",
-        pad=18,
+        pad=20
     )
-    ax.grid(True, alpha=0.28)
+    ax.grid(True, alpha=0.3)
+    ax.set_aspect("auto")
+    ax.set_xlim(float(x_low[VIS_DIMS[0]]), float(x_high[VIS_DIMS[0]]))
+    ax.set_ylim(float(x_low[VIS_DIMS[1]]), float(x_high[VIS_DIMS[1]]))
 
+    # Legend
     from matplotlib.lines import Line2D
     legend_elements = [
         Line2D([0], [0], color="black", lw=2.5, label="True region"),
-        Line2D([0], [0], color="orange", lw=2.2, label="Pre-trained region"),
-        Line2D([0], [0], color="blue", lw=2.8, label="Fine-Tuned region"),
+        Line2D([0], [0], color="orange", lw=2, label="Pre-trained region"),
+        Line2D([0], [0], color="blue", lw=2, label="Fine-Tuned region"),
         Line2D([0], [0], marker="o", color="w", markerfacecolor="red",
-               markersize=9, label="Counterexample", markeredgecolor="darkred", markeredgewidth=1.3),
+               markersize=9, label="Counterexample", markeredgecolor="darkred", markeredgewidth=1.5),
         Line2D([0], [0], marker="o", color="w", markerfacecolor="darkred",
-               markersize=9, label="Next state", markeredgecolor="black", markeredgewidth=1.3),
+               markersize=9, label="Next state", markeredgecolor="black", markeredgewidth=1.5),
     ]
-    ax.legend(handles=legend_elements, loc="lower right", fontsize=11, framealpha=0.95, edgecolor="black")
+    ax.legend(
+        handles=legend_elements,
+        loc="lower right",
+        fontsize=11,
+        framealpha=0.95,
+        edgecolor="black"
+    )
 
     plt.tight_layout()
-    plt.savefig(name_file, dpi=320, bbox_inches="tight")
+
+    # Ensure plots directory exists
+    os.makedirs("plots", exist_ok=True)
+
+    # Save figure
+    plt.savefig(name_file, dpi=300, bbox_inches="tight")
     print(f"\nVisualization saved to: {name_file}")
 
+    # ------------------------------------------------------------
     # Stats
+    # ------------------------------------------------------------
     print("\n" + "=" * 70)
     print("Value Function Comparison Statistics")
     print("=" * 70)
@@ -430,28 +458,18 @@ def visualize_comparison(
     print(f"  Total counterexamples: {(constraint_counter_fine | invariance_counter_fine).sum()}")
     print(f"  TFR (True Feasible Rate): {trf_fine * 100:.2f}%")
 
-    reduction = (constraint_counter_pre | invariance_counter_pre).sum() - (constraint_counter_fine | invariance_counter_fine).sum()
+    reduction = (
+        (constraint_counter_pre | invariance_counter_pre).sum()
+        - (constraint_counter_fine | invariance_counter_fine).sum()
+    )
     print("\nImprovement:")
     print(f"  Counterexamples reduced by: {reduction} points")
     print(f"  Reduction rate: {reduction / max((constraint_counter_pre | invariance_counter_pre).sum(), 1) * 100:.2f}%")
 
-    print(f"\nTrue safe region (100-step horizon on slice): {true_safe_region.mean() * 100:.2f}%")
+    print(f"\nTrue safe region (100-step horizon on displayed slice): {true_safe_region.mean() * 100:.2f}%")
+    print(f"Slice dims: {VIS_DIMS}, fixed_state={FIXED_STATE.tolist()}")
     print("=" * 70)
 
 
-def main():
-    visualize_comparison(
-        fine_tune_model_path='../../models/cart_pole/V_finetune_milp.pth',
-        name_file='plots/comparison_visualization_milp.png',
-        title_suffix='MILP'
-    )
-
-    visualize_comparison(
-        fine_tune_model_path='../../models/cart_pole/V_finetune_enum_milp.pth',
-        name_file='plots/comparison_visualization_enum_milp.png',
-        title_suffix='ENUM + MILP'
-    )
-
-
 if __name__ == "__main__":
-    main()
+    visualize_comparison()

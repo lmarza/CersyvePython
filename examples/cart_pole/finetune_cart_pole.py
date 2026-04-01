@@ -1,5 +1,5 @@
 """
-Example: Finetune value function for the CartPole system (ALL FLOAT32 + fixed save).
+Finetune value function for the CartPole system (ALL FLOAT32 + fixed save).
 """
 
 import os
