@@ -35,7 +35,7 @@ from .enumeration import (
     sample_from_regions,
     get_pure_leaf_rectangles
 )
-from .finetune import finetune_value_w_MILP, finetune_value_enum_MILP
+from .finetune import finetune_value_w_MILP, finetune_value_enum_MILP, finetune_value
 from .verify import verify_value
 
 __version__ = "1.0.0"
