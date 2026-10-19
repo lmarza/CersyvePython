@@ -1,0 +1,83 @@
+{
+  "timestamp": "2026-10-08T20:39:17",
+  "seeds": [
+    0
+  ],
+  "n_verified": 0,
+  "n_runs": 1,
+  "std_definition": "sample standard deviation (ddof=1) over the seeds listed",
+  "stats": {
+    "tfr": {
+      "mean": 0.764298576175537,
+      "std": 0.0,
+      "min": 0.764298576175537,
+      "max": 0.764298576175537,
+      "n": 1
+    },
+    "tfr_certified": {
+      "mean": 0.0,
+      "std": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "n": 1
+    },
+    "iterations": {
+      "mean": 49999.0,
+      "std": 0.0,
+      "min": 49999.0,
+      "max": 49999.0,
+      "n": 1
+    },
+    "verifier_calls": {
+      "mean": 1.0,
+      "std": 0.0,
+      "min": 1.0,
+      "max": 1.0,
+      "n": 1
+    },
+    "milp_solves": {
+      "mean": 2.0,
+      "std": 0.0,
+      "min": 2.0,
+      "max": 2.0,
+      "n": 1
+    },
+    "milp_seconds": {
+      "mean": 1.681410358985886,
+      "std": 0.0,
+      "min": 1.681410358985886,
+      "max": 1.681410358985886,
+      "n": 1
+    },
+    "wall_time_s": {
+      "mean": 17381.339140687138,
+      "std": 0.0,
+      "min": 17381.339140687138,
+      "max": 17381.339140687138,
+      "n": 1
+    },
+    "certified_wall_s": null,
+    "end_to_end_wall_s": {
+      "mean": 17387.071930126054,
+      "std": 0.0,
+      "min": 17387.071930126054,
+      "max": 17387.071930126054,
+      "n": 1
+    }
+  },
+  "per_seed": [
+    {
+      "seed": 0,
+      "verified": false,
+      "tfr": 0.764298576175537,
+      "tfr_certified": 0.0,
+      "iterations": 49999,
+      "verifier_calls": 1,
+      "milp_solves": 2,
+      "milp_seconds": 1.681410358985886,
+      "wall_time_s": 17381.339140687138,
+      "certified_wall_s": null,
+      "end_to_end_wall_s": 17387.071930126054
+    }
+  ]
+}

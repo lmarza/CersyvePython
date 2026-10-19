@@ -1,0 +1,171 @@
+{
+  "task": "pendulum",
+  "method": "enum_milp",
+  "tag": "",
+  "seed": 0,
+  "verified": true,
+  "training_proof": true,
+  "stalled": false,
+  "tfr": 0.9699552937871442,
+  "tfr_certified": 0.9699552937871442,
+  "tfr_train_estimate": 0.9689839572192513,
+  "tfr_eval": {
+    "n_samples": 1000000,
+    "horizon": 100,
+    "seed": 12345
+  },
+  "iterations": 7663,
+  "iterations_definition": "0-based index of the training-loop iteration in which the loop stopped (the proof iteration, or max_iter-1)",
+  "grad_steps": 5165,
+  "verifier_calls": 2,
+  "verifier_calls_training": 1,
+  "milp_solves": 4,
+  "milp_seconds": 7.090267125051469,
+  "milp_seconds_training": 3.5393016550224274,
+  "verifier_proofs": 1,
+  "verifier_refutations": 0,
+  "verifier_inconclusive": 0,
+  "verifier_stages": {
+    "dry_spell": {
+      "calls": 1,
+      "solves": 2,
+      "seconds": 3.5393016550224274,
+      "proof": 1,
+      "refutation": 0,
+      "inconclusive": 0
+    },
+    "reference": {
+      "calls": 1,
+      "solves": 2,
+      "seconds": 3.550965470029041,
+      "proof": 1,
+      "refutation": 0,
+      "inconclusive": 0
+    }
+  },
+  "verifier_log": [
+    {
+      "call": 1,
+      "iter": 7663,
+      "stage": "dry_spell",
+      "verdict": "proof",
+      "seconds": 3.5393016550224274,
+      "load1_at_call": 54.24755859375,
+      "n_counterexamples": 0,
+      "solves": [
+        {
+          "stage": "constraint",
+          "verdict": "pass",
+          "status": "Optimal",
+          "objective": -0.002659266245264358,
+          "seconds": 0.2106098209042102
+        },
+        {
+          "stage": "invariance",
+          "verdict": "pass",
+          "status": "Optimal",
+          "objective": -0.00020361378559385912,
+          "seconds": 3.289137286134064
+        }
+      ],
+      "checkpoint": "models/pendulum/logs/finetune_enum_milp_20261008_161850/verify_calls/call0001_iter7663.pth"
+    },
+    {
+      "call": 2,
+      "iter": 7663,
+      "stage": "reference",
+      "verdict": "proof",
+      "seconds": 3.550965470029041,
+      "load1_at_call": 54.78857421875,
+      "n_counterexamples": 0,
+      "solves": [
+        {
+          "stage": "constraint",
+          "verdict": "pass",
+          "status": "Optimal",
+          "objective": -0.002659266245264358,
+          "seconds": 0.19159543910063803
+        },
+        {
+          "stage": "invariance",
+          "verdict": "pass",
+          "status": "Optimal",
+          "objective": -0.00020361378559385912,
+          "seconds": 3.322526912903413
+        }
+      ],
+      "checkpoint": "models/pendulum/checkpoints/V_finetune_enum_milp_seed0.pth"
+    }
+  ],
+  "reference_reverify": {
+    "result": true,
+    "verified": true,
+    "seconds": 3.550965470029041,
+    "timeout": 1800,
+    "solves": [
+      {
+        "stage": "constraint",
+        "verdict": "pass",
+        "status": "Optimal",
+        "objective": -0.002659266245264358,
+        "seconds": 0.19159543910063803
+      },
+      {
+        "stage": "invariance",
+        "verdict": "pass",
+        "status": "Optimal",
+        "objective": -0.00020361378559385912,
+        "seconds": 3.322526912903413
+      }
+    ]
+  },
+  "wall_time_s": 116.56901516206563,
+  "verified_wall_s": 116.39764975500293,
+  "certified_wall_s": 119.94861522503197,
+  "end_to_end_wall_s": 121.66037124791183,
+  "load1_start": 55.47998046875,
+  "load1_end": 54.8056640625,
+  "n_cpus": 128,
+  "verifier": "milp",
+  "milp_threads": 8,
+  "omp_num_threads": "2",
+  "device": "cuda",
+  "host": "t508-212n5",
+  "started_at": "2026-10-08T16:18:49",
+  "code_sha": "1a875e5e4d515a8616a3bb5f558607a3914f8566",
+  "code_root": ".",
+  "v_pretrain": "models/pendulum/V_pretrain.pth",
+  "log_path": "models/pendulum/logs/finetune_enum_milp_20261008_161850",
+  "model_path": "models/pendulum/checkpoints/V_finetune_enum_milp_seed0.pth",
+  "config": {
+    "lr": 6.224986752640119e-05,
+    "max_iter": 20000,
+    "tol": 0.00012798220872601958,
+    "capacity": 10000,
+    "sample_size": 100,
+    "replay": 1,
+    "max_skip": 78,
+    "enum_freq": 910,
+    "enum_n_samples": 3150,
+    "enum_coverage": 70.16585540771484,
+    "enum_n_trees": 336,
+    "enum_max_depth": 20,
+    "enum_n_train": 40000,
+    "enum_n_jobs": null,
+    "refill_threshold": 168,
+    "fallback_eval_rounds": 5,
+    "fallback_eval_samples": 100000,
+    "fallback_n_neighbors": 5000,
+    "fallback_radius": 0.023238460909996834,
+    "search_size": 1000,
+    "reg_method": "ESR",
+    "esr_max_con": null,
+    "eps_h": 0.018148114096988997,
+    "eps_v": 0.0018739202008158733,
+    "reg_coef": 0.3610513451338306,
+    "esr_box_ratio": 1.0,
+    "milp_timeout": 300,
+    "eval_every": 100,
+    "save_every": 5000
+  }
+}

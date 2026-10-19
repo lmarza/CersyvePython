@@ -1,0 +1,194 @@
+{
+  "task": "robot_arm",
+  "method": "pgd_milp",
+  "tag": "",
+  "seed": 1,
+  "verified": true,
+  "training_proof": true,
+  "stalled": false,
+  "tfr": 0.5466036941961073,
+  "tfr_certified": 0.5466036941961073,
+  "tfr_train_estimate": 0.5435645331831976,
+  "tfr_eval": {
+    "n_samples": 1000000,
+    "horizon": 100,
+    "seed": 12345
+  },
+  "iterations": 2032,
+  "iterations_definition": "0-based index of the training-loop iteration in which the loop stopped (the proof iteration, or max_iter-1)",
+  "grad_steps": 829,
+  "verifier_calls": 3,
+  "verifier_calls_training": 2,
+  "milp_solves": 6,
+  "milp_seconds": 171.5645678662695,
+  "milp_seconds_training": 110.91668773908168,
+  "verifier_proofs": 1,
+  "verifier_refutations": 1,
+  "verifier_inconclusive": 0,
+  "verifier_stages": {
+    "dry_spell": {
+      "calls": 2,
+      "solves": 4,
+      "seconds": 110.91668773908168,
+      "proof": 1,
+      "refutation": 1,
+      "inconclusive": 0
+    },
+    "reference": {
+      "calls": 1,
+      "solves": 2,
+      "seconds": 60.64788012718782,
+      "proof": 1,
+      "refutation": 0,
+      "inconclusive": 0
+    }
+  },
+  "verifier_log": [
+    {
+      "call": 1,
+      "iter": 1564,
+      "stage": "dry_spell",
+      "verdict": "refutation",
+      "seconds": 56.38286490109749,
+      "n_counterexamples": 1,
+      "solves": [
+        {
+          "stage": "constraint",
+          "verdict": "pass",
+          "status": "Optimal",
+          "objective": -0.04267303312747148,
+          "seconds": 1.551087582949549
+        },
+        {
+          "stage": "invariance",
+          "verdict": "violation",
+          "status": "Optimal",
+          "objective": 0.0013658887252173818,
+          "seconds": 54.79411618807353
+        }
+      ]
+    },
+    {
+      "call": 2,
+      "iter": 2032,
+      "stage": "dry_spell",
+      "verdict": "proof",
+      "seconds": 54.53382283798419,
+      "n_counterexamples": 0,
+      "solves": [
+        {
+          "stage": "constraint",
+          "verdict": "pass",
+          "status": "Optimal",
+          "objective": -0.03195473945265426,
+          "seconds": 1.7994729010388255
+        },
+        {
+          "stage": "invariance",
+          "verdict": "pass",
+          "status": "Optimal",
+          "objective": -0.0003820750868506473,
+          "seconds": 52.69932503486052
+        }
+      ]
+    },
+    {
+      "call": 3,
+      "iter": 2032,
+      "stage": "reference",
+      "verdict": "proof",
+      "seconds": 60.64788012718782,
+      "n_counterexamples": 0,
+      "solves": [
+        {
+          "stage": "constraint",
+          "verdict": "pass",
+          "status": "Optimal",
+          "objective": -0.03195473945265648,
+          "seconds": 1.3287021468859166
+        },
+        {
+          "stage": "invariance",
+          "verdict": "pass",
+          "status": "Optimal",
+          "objective": -0.00038103691576282794,
+          "seconds": 59.28459079307504
+        }
+      ]
+    }
+  ],
+  "reference_reverify": {
+    "result": true,
+    "verified": true,
+    "seconds": 60.64788012718782,
+    "timeout": 1800,
+    "solves": [
+      {
+        "stage": "constraint",
+        "verdict": "pass",
+        "status": "Optimal",
+        "objective": -0.03195473945265648,
+        "seconds": 1.3287021468859166
+      },
+      {
+        "stage": "invariance",
+        "verdict": "pass",
+        "status": "Optimal",
+        "objective": -0.00038103691576282794,
+        "seconds": 59.28459079307504
+      }
+    ]
+  },
+  "wall_time_s": 1591.352705457015,
+  "verified_wall_s": 1591.2036958590616,
+  "certified_wall_s": 1651.8515759862494,
+  "end_to_end_wall_s": 1657.178696732968,
+  "verifier": "milp",
+  "milp_threads": 8,
+  "omp_num_threads": "2",
+  "device": "cuda",
+  "host": "t508-212n5",
+  "started_at": "2026-10-08T15:49:30",
+  "code_sha": "28281e333f37d5050e308e5f675b67760ff23265",
+  "code_root": ".",
+  "v_pretrain": "models/robot_arm/V_pretrain.pth",
+  "log_path": "models/robot_arm/logs/finetune_milp_20261008_154935",
+  "model_path": "models/robot_arm/checkpoints/V_finetune_pgd_milp_seed1.pth",
+  "config": {
+    "lr": 0.00027833200647262165,
+    "max_iter": 30000,
+    "search_size": 2847,
+    "bnd_ratio": 0.1,
+    "bnd_ratio_avg": 0.9,
+    "min_bnd_ratio": 0.01,
+    "max_bnd_ratio": 1.0,
+    "bnd_eps": 0.1,
+    "search_method": "BGB",
+    "pgd_step": 20,
+    "pgd_eps": 0.08516878407248273,
+    "backtrack_step": 20,
+    "length_discount": 0.8,
+    "direct_discount": 0.5,
+    "tol": 0.0001,
+    "capacity": 10000,
+    "sample_size": 100,
+    "search_stop": 1000,
+    "replay": 1,
+    "max_skip": 466,
+    "reg_method": "ESR",
+    "esr_max_con": null,
+    "eps_h": 0.01,
+    "eps_v": 0.01,
+    "reg_coef": 0.06831362732293038,
+    "esr_box_ratio": 0.7,
+    "milp_timeout": 1800,
+    "milp_start_iter": 0,
+    "milp_cooldown": 0,
+    "milp_box_shrink": 1.0,
+    "milp_box_grow": 1.0,
+    "milp_box_max": 1.0,
+    "milp_max_inconclusive": 1,
+    "eval_every": 10,
+    "save_every": 1000
+  }
+}

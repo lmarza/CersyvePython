@@ -1,0 +1,38 @@
+{
+  "source": "models/roboracer/results/pgd_milp/seed2.json",
+  "threads": 8,
+  "timeout": 1800,
+  "calls": [
+    {
+      "call": 1,
+      "iter": 49999,
+      "stage": "reference",
+      "verdict": "refutation",
+      "verdict_replay": "refutation",
+      "seconds_run": 1.9388784510083497,
+      "load1_run": null,
+      "seconds_replay": 1.2616644650697708,
+      "load1_replay": 6.6201171875,
+      "solves_replay": [
+        {
+          "stage": "constraint",
+          "verdict": "pass",
+          "status": "Optimal",
+          "objective": -0.0034066086103955455,
+          "seconds": 0.27808465505950153
+        },
+        {
+          "stage": "invariance",
+          "verdict": "violation",
+          "status": "Optimal",
+          "objective": 0.00024494478992954927,
+          "seconds": 0.9569350711535662
+        }
+      ]
+    }
+  ],
+  "mismatch": 0,
+  "milp_seconds_run": 1.9388784510083497,
+  "milp_seconds_replay": 1.2616644650697708,
+  "n_replayed": 1
+}

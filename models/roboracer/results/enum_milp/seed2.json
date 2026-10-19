@@ -1,0 +1,245 @@
+{
+  "seed": 2,
+  "task": "roboracer",
+  "verified": true,
+  "tfr": 0.7282889973825392,
+  "tfr_certified": 0.7282889973825392,
+  "checkpoint": "models/roboracer/checkpoints/V_finetune_enum_milp_seed2.pth",
+  "verifier_calls": 7,
+  "milp_seconds": 28.913171488791704,
+  "verifier_calls_returning_counterexample": 5,
+  "verifier_log": [
+    {
+      "call": 1,
+      "iter": 14999,
+      "stage": "reference",
+      "verdict": "refutation",
+      "seconds": 4.0780363969970495,
+      "load1_at_call": 66.00390625,
+      "n_counterexamples": 1,
+      "solves": [
+        {
+          "stage": "constraint",
+          "verdict": "pass",
+          "status": "Optimal",
+          "objective": -0.00040189147532786185,
+          "seconds": 0.2613565628416836
+        },
+        {
+          "stage": "invariance",
+          "verdict": "violation",
+          "status": "Optimal",
+          "objective": 0.0009957696474357375,
+          "seconds": 3.7750065599102527
+        }
+      ],
+      "checkpoint": "models/roboracer/results/enum_milp/checkpoints/seed2_call01.pth",
+      "original_checkpoint": "",
+      "checkpoint_sha256": "179f57f124ee91bee6ce108da5643979a73fe334865bc7c487860e48e2b9b39f",
+      "replay_seconds_8_threads": 1.6003000249620527,
+      "replay_verdict_agrees": true
+    },
+    {
+      "stage": "regional_repair",
+      "verdict": "refutation",
+      "seconds": 4.859565816121176,
+      "n_counterexamples": 1,
+      "solves": [
+        {
+          "stage": "constraint",
+          "verdict": "pass",
+          "status": "Optimal",
+          "objective": -0.00024279934593260388,
+          "seconds": 0.3174624480307102
+        },
+        {
+          "stage": "invariance",
+          "verdict": "violation",
+          "status": "Optimal",
+          "objective": 0.0002726506689687408,
+          "seconds": 4.487695318181068
+        }
+      ],
+      "call": 2,
+      "checkpoint": "models/roboracer/results/enum_milp/checkpoints/seed2_call02.pth",
+      "original_checkpoint": "",
+      "checkpoint_sha256": "4f6b7f542221caab407a4cbce9a3824fdc09e9bd79eaf0381718a0c9c9d4a9c8",
+      "replay_seconds_8_threads": 1.5176496708299965,
+      "replay_verdict_agrees": true
+    },
+    {
+      "stage": "regional_repair",
+      "verdict": "refutation",
+      "seconds": 4.443277667975053,
+      "n_counterexamples": 1,
+      "solves": [
+        {
+          "stage": "constraint",
+          "verdict": "pass",
+          "status": "Optimal",
+          "objective": -0.000275264122545249,
+          "seconds": 0.3050362269859761
+        },
+        {
+          "stage": "invariance",
+          "verdict": "violation",
+          "status": "Optimal",
+          "objective": 0.00027191187601710576,
+          "seconds": 4.095446055056527
+        }
+      ],
+      "call": 3,
+      "checkpoint": "models/roboracer/results/enum_milp/checkpoints/seed2_call03.pth",
+      "original_checkpoint": "",
+      "checkpoint_sha256": "edd69e754b3e9787c7bbe297e5c7bc56535bd7a55ee9f73e908452124f9f9165",
+      "replay_seconds_8_threads": 1.3069709520787,
+      "replay_verdict_agrees": true
+    },
+    {
+      "stage": "regional_repair",
+      "verdict": "proof",
+      "seconds": 3.910924370866269,
+      "n_counterexamples": 0,
+      "solves": [
+        {
+          "stage": "constraint",
+          "verdict": "pass",
+          "status": "Optimal",
+          "objective": -0.00010783515596149429,
+          "seconds": 0.25563991302624345
+        },
+        {
+          "stage": "invariance",
+          "verdict": "pass",
+          "status": "Optimal",
+          "objective": -1.820844713915082e-05,
+          "seconds": 3.619282087078318
+        }
+      ],
+      "call": 4,
+      "checkpoint": "models/roboracer/results/enum_milp/checkpoints/seed2_call04.pth",
+      "original_checkpoint": "",
+      "checkpoint_sha256": "05adab47ece0eb4fe48f96d80ccfa349bea43bf1841f1fe77694b19338072109",
+      "replay_seconds_8_threads": 1.7194744320586324,
+      "replay_verdict_agrees": true
+    },
+    {
+      "stage": "regional_expansion",
+      "checkpoint": "models/roboracer/results/enum_milp/checkpoints/seed2_call05.pth",
+      "verdict": "refutation",
+      "seconds": 4.083811753895134,
+      "n_counterexamples": 1,
+      "solves": [
+        {
+          "stage": "constraint",
+          "verdict": "pass",
+          "status": "Optimal",
+          "objective": -0.00010038722013439028,
+          "seconds": 0.3369530939962715
+        },
+        {
+          "stage": "invariance",
+          "verdict": "violation",
+          "status": "Optimal",
+          "objective": 6.60607910654698e-05,
+          "seconds": 3.695174357155338
+        }
+      ],
+      "call": 5,
+      "original_checkpoint": "",
+      "checkpoint_sha256": "55f5ade98e0e934b47b3d4663ff975a8130a3d6a9d4b841b9c13d0b0ea694fc7",
+      "replay_seconds_8_threads": 1.3539829631336033,
+      "replay_verdict_agrees": true
+    },
+    {
+      "stage": "regional_expansion",
+      "checkpoint": "models/roboracer/results/enum_milp/checkpoints/seed2_call06.pth",
+      "verdict": "refutation",
+      "seconds": 3.6752246120013297,
+      "n_counterexamples": 1,
+      "solves": [
+        {
+          "stage": "constraint",
+          "verdict": "pass",
+          "status": "Optimal",
+          "objective": -0.0001008520276672975,
+          "seconds": 0.2716931060422212
+        },
+        {
+          "stage": "invariance",
+          "verdict": "violation",
+          "status": "Optimal",
+          "objective": 2.6647998359718983e-05,
+          "seconds": 3.372854480985552
+        }
+      ],
+      "call": 6,
+      "original_checkpoint": "",
+      "checkpoint_sha256": "0044d6b4c72b6c899615225726ba44d89147114cfb8ef9ab6a68ce5ca0098a2e",
+      "replay_seconds_8_threads": 1.211321631912142,
+      "replay_verdict_agrees": true
+    },
+    {
+      "stage": "regional_expansion",
+      "checkpoint": "models/roboracer/results/enum_milp/checkpoints/seed2_call07.pth",
+      "verdict": "proof",
+      "seconds": 3.8623308709356934,
+      "n_counterexamples": 0,
+      "solves": [
+        {
+          "stage": "constraint",
+          "verdict": "pass",
+          "status": "Optimal",
+          "objective": -0.00010113498287300793,
+          "seconds": 0.36038326588459313
+        },
+        {
+          "stage": "invariance",
+          "verdict": "pass",
+          "status": "Optimal",
+          "objective": -1.9108623858926643e-06,
+          "seconds": 3.4617799459956586
+        }
+      ],
+      "call": 7,
+      "original_checkpoint": "",
+      "checkpoint_sha256": "3db16a96b08d71e9f915e7315b75dc0010d85f01acbe9cafa5bcfb84cf1254e8",
+      "replay_seconds_8_threads": 1.572919923113659,
+      "replay_verdict_agrees": true
+    }
+  ],
+  "training_iterations": 15000,
+  "repair_updates": 12,
+  "timing": "Monitored shared machine, one solver thread, CPU affinity; no isolation claim",
+  "stopped_unix": 1791670728.7755349,
+  "growth_result": null,
+  "expansion_updates": 21,
+  "extra_verifier_calls": [],
+  "method": "enum_milp_guarded_expansion",
+  "tag": "",
+  "tfr_eval": {
+    "tfr": 0.7282889973825392,
+    "n_samples": 1000000,
+    "horizon": 100,
+    "seed": 12345,
+    "checkpoint": ""
+  },
+  "milp_threads": 1,
+  "milp_seconds_replay_8_threads": 10.282619598088786,
+  "replay_all_verdicts_agree": true,
+  "shared_machine": true,
+  "exclusive_cpu": false,
+  "replay_contention_observed": true,
+  "replay_max_observed_sibling_cpu_percent": 59.4,
+  "timing_note": "Original calls used 1 MILP thread. The complete saved call sequence was separately replayed using 8 MILP threads. Both were monitored on a shared machine; SMT sibling activity was observed. Replay calls are measurements, not new algorithm invocations.",
+  "additional_continuous_optimization": {
+    "repair_sensitivity_lp_calls": 21960,
+    "repair_sensitivity_lp_seconds": 51.41735983407125,
+    "repair_continuous_qp_calls": 12,
+    "repair_continuous_qp_seconds": 1.1668140871915966,
+    "growth_sensitivity_lp_calls": 151884,
+    "growth_sensitivity_lp_seconds": 342.2096433243714,
+    "growth_continuous_qp_calls": 21,
+    "growth_continuous_qp_seconds": 24.765558407641947
+  }
+}

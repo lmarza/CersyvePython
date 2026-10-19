@@ -1,0 +1,218 @@
+{
+  "task": "cartpole",
+  "method": "pgd_milp",
+  "tag": "",
+  "seed": 2,
+  "verified": true,
+  "training_proof": true,
+  "stalled": false,
+  "tfr": 0.30183548824115325,
+  "tfr_certified": 0.30183548824115325,
+  "tfr_train_estimate": 0.30089485458612975,
+  "tfr_eval": {
+    "n_samples": 1000000,
+    "horizon": 100,
+    "seed": 12345
+  },
+  "iterations": 14072,
+  "iterations_definition": "0-based index of the training-loop iteration in which the loop stopped (the proof iteration, or max_iter-1)",
+  "grad_steps": 13399,
+  "verifier_calls": 4,
+  "verifier_calls_training": 3,
+  "milp_solves": 8,
+  "milp_seconds": 7.479986928869039,
+  "milp_seconds_training": 5.7417843888979405,
+  "verifier_proofs": 1,
+  "verifier_refutations": 2,
+  "verifier_inconclusive": 0,
+  "verifier_stages": {
+    "dry_spell": {
+      "calls": 3,
+      "solves": 6,
+      "seconds": 5.7417843888979405,
+      "proof": 1,
+      "refutation": 2,
+      "inconclusive": 0
+    },
+    "reference": {
+      "calls": 1,
+      "solves": 2,
+      "seconds": 1.7382025399710983,
+      "proof": 1,
+      "refutation": 0,
+      "inconclusive": 0
+    }
+  },
+  "verifier_log": [
+    {
+      "call": 1,
+      "iter": 13212,
+      "stage": "dry_spell",
+      "verdict": "refutation",
+      "seconds": 1.8327032788656652,
+      "n_counterexamples": 1,
+      "solves": [
+        {
+          "stage": "constraint",
+          "verdict": "pass",
+          "status": "Optimal",
+          "objective": -0.009199875854069312,
+          "seconds": 0.09184332401491702
+        },
+        {
+          "stage": "invariance",
+          "verdict": "violation",
+          "status": "Optimal",
+          "objective": 0.0002911024882694402,
+          "seconds": 1.7034185521770269
+        }
+      ]
+    },
+    {
+      "call": 2,
+      "iter": 13492,
+      "stage": "dry_spell",
+      "verdict": "refutation",
+      "seconds": 2.1563554180320352,
+      "n_counterexamples": 1,
+      "solves": [
+        {
+          "stage": "constraint",
+          "verdict": "pass",
+          "status": "Optimal",
+          "objective": -0.005181804258335254,
+          "seconds": 0.09396990900859237
+        },
+        {
+          "stage": "invariance",
+          "verdict": "violation",
+          "status": "Optimal",
+          "objective": 0.0008632862033522426,
+          "seconds": 2.0256533208303154
+        }
+      ]
+    },
+    {
+      "call": 3,
+      "iter": 14072,
+      "stage": "dry_spell",
+      "verdict": "proof",
+      "seconds": 1.75272569200024,
+      "n_counterexamples": 0,
+      "solves": [
+        {
+          "stage": "constraint",
+          "verdict": "pass",
+          "status": "Optimal",
+          "objective": -0.024961819532475782,
+          "seconds": 0.07938298606313765
+        },
+        {
+          "stage": "invariance",
+          "verdict": "pass",
+          "status": "Optimal",
+          "objective": -0.0001182729347254316,
+          "seconds": 1.635687367990613
+        }
+      ]
+    },
+    {
+      "call": 4,
+      "iter": 14072,
+      "stage": "reference",
+      "verdict": "proof",
+      "seconds": 1.7382025399710983,
+      "n_counterexamples": 0,
+      "solves": [
+        {
+          "stage": "constraint",
+          "verdict": "pass",
+          "status": "Optimal",
+          "objective": -0.024961819532475782,
+          "seconds": 0.07888524094596505
+        },
+        {
+          "stage": "invariance",
+          "verdict": "pass",
+          "status": "Optimal",
+          "objective": -0.0001182729347254316,
+          "seconds": 1.624874697998166
+        }
+      ]
+    }
+  ],
+  "reference_reverify": {
+    "result": true,
+    "verified": true,
+    "seconds": 1.7382025399710983,
+    "timeout": 1800,
+    "solves": [
+      {
+        "stage": "constraint",
+        "verdict": "pass",
+        "status": "Optimal",
+        "objective": -0.024961819532475782,
+        "seconds": 0.07888524094596505
+      },
+      {
+        "stage": "invariance",
+        "verdict": "pass",
+        "status": "Optimal",
+        "objective": -0.0001182729347254316,
+        "seconds": 1.624874697998166
+      }
+    ]
+  },
+  "wall_time_s": 11071.694605631055,
+  "verified_wall_s": 11071.471540441038,
+  "certified_wall_s": 11073.20974298101,
+  "end_to_end_wall_s": 11079.022017600015,
+  "verifier": "milp",
+  "milp_threads": 8,
+  "omp_num_threads": "2",
+  "device": "cuda",
+  "host": "t508-212n5",
+  "started_at": "2026-10-08T15:49:30",
+  "code_sha": "a969fad9d3339dc797d123fb45b51c48c62172a9",
+  "code_root": ".",
+  "v_pretrain": "models/cartpole/V_pretrain.pth",
+  "log_path": "models/cartpole/logs/finetune_milp_20261008_154935",
+  "model_path": "models/cartpole/checkpoints/V_finetune_pgd_milp_seed2.pth",
+  "config": {
+    "lr": 0.0009776166093634973,
+    "max_iter": 60000,
+    "search_size": 1041,
+    "bnd_ratio": 0.1,
+    "bnd_ratio_avg": 0.9,
+    "min_bnd_ratio": 0.01,
+    "max_bnd_ratio": 1.0,
+    "bnd_eps": 0.1,
+    "search_method": "BGB",
+    "pgd_step": 37,
+    "pgd_eps": 0.082604054891454,
+    "backtrack_step": 20,
+    "length_discount": 0.8,
+    "direct_discount": 0.5,
+    "tol": 0.0001,
+    "capacity": 10000,
+    "sample_size": 100,
+    "search_stop": 1000,
+    "replay": 1,
+    "max_skip": 74,
+    "reg_method": "ESR",
+    "esr_max_con": null,
+    "eps_h": 0.01,
+    "eps_v": 0.01,
+    "reg_coef": 0.12289144377205136,
+    "esr_box_ratio": 0.7,
+    "milp_timeout": 500,
+    "milp_start_iter": 0,
+    "milp_cooldown": 0,
+    "milp_box_shrink": 1.0,
+    "milp_box_grow": 1.0,
+    "milp_box_max": 1.0,
+    "milp_max_inconclusive": 6,
+    "eval_every": 10,
+    "save_every": 1000
+  }
+}

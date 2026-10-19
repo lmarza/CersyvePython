@@ -1,0 +1,67 @@
+{
+  "source": "models/robot_arm/results/enum_milp/seed1.json",
+  "threads": 8,
+  "timeout": 1800,
+  "verifier": "milp",
+  "calls": [
+    {
+      "call": 10,
+      "iter": 25399,
+      "stage": "dry_spell",
+      "verdict": "proof",
+      "verdict_replay": "proof",
+      "seconds_run": 74.0492221750319,
+      "load1_run": 63.7958984375,
+      "seconds_replay": 82.12424229294993,
+      "load1_replay": 16.47607421875,
+      "solves_replay": [
+        {
+          "stage": "constraint",
+          "verdict": "pass",
+          "status": "Optimal",
+          "objective": -0.007605174468168996,
+          "seconds": 2.0880176359787583
+        },
+        {
+          "stage": "invariance",
+          "verdict": "pass",
+          "status": "Optimal",
+          "objective": -0.00026706185014836736,
+          "seconds": 80.00319888209924
+        }
+      ]
+    },
+    {
+      "call": 11,
+      "iter": 25399,
+      "stage": "reference",
+      "verdict": "proof",
+      "verdict_replay": "proof",
+      "seconds_run": 117.77923202305101,
+      "load1_run": 63.771484375,
+      "seconds_replay": 82.72765386290848,
+      "load1_replay": 14.09716796875,
+      "solves_replay": [
+        {
+          "stage": "constraint",
+          "verdict": "pass",
+          "status": "Optimal",
+          "objective": -0.007605174468168996,
+          "seconds": 2.070911119924858
+        },
+        {
+          "stage": "invariance",
+          "verdict": "pass",
+          "status": "Optimal",
+          "objective": -0.00026706185014836736,
+          "seconds": 80.62394040892832
+        }
+      ]
+    }
+  ],
+  "mismatch": 0,
+  "milp_seconds_run": 563.3546081110835,
+  "milp_seconds_replay": 164.8518961558584,
+  "final_proof_s_replay": 82.12424229294993,
+  "n_replayed": 2
+}

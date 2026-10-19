@@ -1,0 +1,38 @@
+{
+ "unicycle/1": {
+  "enum_paired": 94.99782555063638,
+  "pgd_paired": 94.95705847751731,
+  "diff_pp": 0.040767073119084785,
+  "diff_min": 0.036360700734647367,
+  "diff_max": 0.047224022104188634,
+  "enum_reported": 95.09,
+  "pgd_reported": 94.96,
+  "enum_iter": 32114,
+  "pgd_iter": 59464,
+  "note": ""
+ },
+ "unicycle/0": {
+  "enum_paired": 94.1743208746701,
+  "pgd_paired": 93.84294760220105,
+  "diff_pp": 0.3313732724690273,
+  "diff_min": 0.3233009752611622,
+  "diff_max": 0.3378487371967793,
+  "enum_reported": 94.26,
+  "pgd_reported": 93.75,
+  "enum_iter": 13420,
+  "pgd_iter": 14982,
+  "note": ""
+ },
+ "unicycle/2": {
+  "enum_paired": 94.57954652120479,
+  "pgd_paired": 93.96777495317065,
+  "diff_pp": 0.6117715680341339,
+  "diff_min": 0.6097163372859882,
+  "diff_max": 0.6158284897324364,
+  "enum_reported": 94.77,
+  "pgd_reported": 94.0,
+  "enum_iter": 28659,
+  "pgd_iter": 59826,
+  "note": ""
+ }
+}

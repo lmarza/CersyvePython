@@ -1,0 +1,89 @@
+{
+  "timestamp": "2026-10-08T23:04:34",
+  "seeds": [
+    0
+  ],
+  "n_verified": 1,
+  "n_runs": 1,
+  "std_definition": "sample standard deviation (ddof=1) over the seeds listed",
+  "stats": {
+    "tfr": {
+      "mean": 0.4416093109953144,
+      "std": 0.0,
+      "min": 0.4416093109953144,
+      "max": 0.4416093109953144,
+      "n": 1
+    },
+    "tfr_certified": {
+      "mean": 0.4416093109953144,
+      "std": 0.0,
+      "min": 0.4416093109953144,
+      "max": 0.4416093109953144,
+      "n": 1
+    },
+    "iterations": {
+      "mean": 25720.0,
+      "std": 0.0,
+      "min": 25720.0,
+      "max": 25720.0,
+      "n": 1
+    },
+    "verifier_calls": {
+      "mean": 3.0,
+      "std": 0.0,
+      "min": 3.0,
+      "max": 3.0,
+      "n": 1
+    },
+    "milp_solves": {
+      "mean": 6.0,
+      "std": 0.0,
+      "min": 6.0,
+      "max": 6.0,
+      "n": 1
+    },
+    "milp_seconds": {
+      "mean": 7.079140344867483,
+      "std": 0.0,
+      "min": 7.079140344867483,
+      "max": 7.079140344867483,
+      "n": 1
+    },
+    "wall_time_s": {
+      "mean": 26095.945640865946,
+      "std": 0.0,
+      "min": 26095.945640865946,
+      "max": 26095.945640865946,
+      "n": 1
+    },
+    "certified_wall_s": {
+      "mean": 26098.03681800887,
+      "std": 0.0,
+      "min": 26098.03681800887,
+      "max": 26098.03681800887,
+      "n": 1
+    },
+    "end_to_end_wall_s": {
+      "mean": 26103.81327530113,
+      "std": 0.0,
+      "min": 26103.81327530113,
+      "max": 26103.81327530113,
+      "n": 1
+    }
+  },
+  "per_seed": [
+    {
+      "seed": 0,
+      "verified": true,
+      "tfr": 0.4416093109953144,
+      "tfr_certified": 0.4416093109953144,
+      "iterations": 25720,
+      "verifier_calls": 3,
+      "milp_solves": 6,
+      "milp_seconds": 7.079140344867483,
+      "wall_time_s": 26095.945640865946,
+      "certified_wall_s": 26098.03681800887,
+      "end_to_end_wall_s": 26103.81327530113
+    }
+  ]
+}

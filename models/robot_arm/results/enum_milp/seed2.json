@@ -1,0 +1,345 @@
+{
+  "task": "robot_arm",
+  "method": "enum_milp",
+  "tag": "",
+  "seed": 2,
+  "verified": true,
+  "training_proof": true,
+  "stalled": false,
+  "tfr": 0.6789308568303705,
+  "tfr_certified": 0.6789308568303705,
+  "tfr_train_estimate": 0.6742939600082457,
+  "tfr_eval": {
+    "n_samples": 1000000,
+    "horizon": 100,
+    "seed": 12345
+  },
+  "iterations": 19033,
+  "iterations_definition": "0-based index of the training-loop iteration in which the loop stopped (the proof iteration, or max_iter-1)",
+  "grad_steps": 3750,
+  "final_proof_s": 58.51284793810919,
+  "final_proof_s_definition": "wall seconds of the training-loop verifier call that proved the certificate (the baseline paper's verification time)",
+  "verifier_calls": 7,
+  "verifier_calls_training": 6,
+  "milp_solves": 14,
+  "milp_seconds": 328.367861301871,
+  "milp_seconds_training": 239.63558231596835,
+  "verifier_proofs": 1,
+  "verifier_refutations": 5,
+  "verifier_inconclusive": 0,
+  "verifier_stages": {
+    "dry_spell": {
+      "calls": 6,
+      "solves": 12,
+      "seconds": 239.63558231596835,
+      "proof": 1,
+      "refutation": 5,
+      "inconclusive": 0
+    },
+    "reference": {
+      "calls": 1,
+      "solves": 2,
+      "seconds": 88.73227898590267,
+      "proof": 1,
+      "refutation": 0,
+      "inconclusive": 0
+    }
+  },
+  "verifier_log": [
+    {
+      "call": 1,
+      "iter": 16800,
+      "stage": "dry_spell",
+      "verdict": "refutation",
+      "seconds": 29.987941364990547,
+      "load1_at_call": 57.3759765625,
+      "n_counterexamples": 2,
+      "solves": [
+        {
+          "stage": "constraint",
+          "verdict": "pass",
+          "status": "boxes=8 prechecked=0 verdicts={'pass': 8, 'violation': 0, 'inconclusive': 0}",
+          "objective": null,
+          "seconds": 5.225210666656494,
+          "boxes": 8,
+          "n_lp": 946
+        },
+        {
+          "stage": "invariance",
+          "verdict": "violation",
+          "status": "boxes=8 prechecked=0 verdicts={'pass': 2, 'violation': 2, 'inconclusive': 4}",
+          "objective": 0.006330662898168651,
+          "seconds": 24.762593984603882,
+          "boxes": 8,
+          "n_lp": 1840
+        }
+      ],
+      "checkpoint": "models/robot_arm/logs/finetune_enum_milp_20261010_185906_1284094/verify_calls/call0001_iter16800.pth"
+    },
+    {
+      "call": 2,
+      "iter": 18000,
+      "stage": "dry_spell",
+      "verdict": "refutation",
+      "seconds": 41.24154164781794,
+      "load1_at_call": 60.50341796875,
+      "n_counterexamples": 2,
+      "solves": [
+        {
+          "stage": "constraint",
+          "verdict": "pass",
+          "status": "boxes=8 prechecked=0 verdicts={'pass': 8, 'violation': 0, 'inconclusive': 0}",
+          "objective": null,
+          "seconds": 2.6308484077453613,
+          "boxes": 8,
+          "n_lp": 946
+        },
+        {
+          "stage": "invariance",
+          "verdict": "violation",
+          "status": "boxes=8 prechecked=0 verdicts={'pass': 6, 'violation': 2, 'inconclusive': 0}",
+          "objective": 0.006829356554258745,
+          "seconds": 38.61053466796875,
+          "boxes": 8,
+          "n_lp": 1840
+        }
+      ],
+      "checkpoint": "models/robot_arm/logs/finetune_enum_milp_20261010_185906_1284094/verify_calls/call0002_iter18000.pth"
+    },
+    {
+      "call": 3,
+      "iter": 18686,
+      "stage": "dry_spell",
+      "verdict": "refutation",
+      "seconds": 33.78235007007606,
+      "load1_at_call": 53.90185546875,
+      "n_counterexamples": 1,
+      "solves": [
+        {
+          "stage": "constraint",
+          "verdict": "pass",
+          "status": "boxes=8 prechecked=0 verdicts={'pass': 8, 'violation': 0, 'inconclusive': 0}",
+          "objective": null,
+          "seconds": 1.785527229309082,
+          "boxes": 8,
+          "n_lp": 948
+        },
+        {
+          "stage": "invariance",
+          "verdict": "violation",
+          "status": "boxes=8 prechecked=0 verdicts={'pass': 5, 'violation': 1, 'inconclusive': 2}",
+          "objective": 0.00017499493863179505,
+          "seconds": 31.996705055236816,
+          "boxes": 8,
+          "n_lp": 1842
+        }
+      ],
+      "checkpoint": "models/robot_arm/logs/finetune_enum_milp_20261010_185906_1284094/verify_calls/call0003_iter18686.pth"
+    },
+    {
+      "call": 4,
+      "iter": 18887,
+      "stage": "dry_spell",
+      "verdict": "refutation",
+      "seconds": 34.03974568005651,
+      "load1_at_call": 55.89013671875,
+      "n_counterexamples": 2,
+      "solves": [
+        {
+          "stage": "constraint",
+          "verdict": "pass",
+          "status": "boxes=8 prechecked=0 verdicts={'pass': 8, 'violation': 0, 'inconclusive': 0}",
+          "objective": null,
+          "seconds": 2.30008602142334,
+          "boxes": 8,
+          "n_lp": 948
+        },
+        {
+          "stage": "invariance",
+          "verdict": "violation",
+          "status": "boxes=8 prechecked=0 verdicts={'pass': 5, 'violation': 2, 'inconclusive': 1}",
+          "objective": 0.0007362660849272729,
+          "seconds": 31.739545345306396,
+          "boxes": 8,
+          "n_lp": 1842
+        }
+      ],
+      "checkpoint": "models/robot_arm/logs/finetune_enum_milp_20261010_185906_1284094/verify_calls/call0004_iter18887.pth"
+    },
+    {
+      "call": 5,
+      "iter": 18988,
+      "stage": "dry_spell",
+      "verdict": "refutation",
+      "seconds": 42.0711556149181,
+      "load1_at_call": 52.14697265625,
+      "n_counterexamples": 1,
+      "solves": [
+        {
+          "stage": "constraint",
+          "verdict": "pass",
+          "status": "boxes=8 prechecked=0 verdicts={'pass': 8, 'violation': 0, 'inconclusive': 0}",
+          "objective": null,
+          "seconds": 2.017594575881958,
+          "boxes": 8,
+          "n_lp": 948
+        },
+        {
+          "stage": "invariance",
+          "verdict": "violation",
+          "status": "boxes=8 prechecked=0 verdicts={'pass': 6, 'violation': 1, 'inconclusive': 1}",
+          "objective": 0.00023094031257195335,
+          "seconds": 40.053457260131836,
+          "boxes": 8,
+          "n_lp": 1842
+        }
+      ],
+      "checkpoint": "models/robot_arm/logs/finetune_enum_milp_20261010_185906_1284094/verify_calls/call0005_iter18988.pth"
+    },
+    {
+      "call": 6,
+      "iter": 19033,
+      "stage": "dry_spell",
+      "verdict": "proof",
+      "seconds": 58.51284793810919,
+      "load1_at_call": 58.654296875,
+      "n_counterexamples": 0,
+      "solves": [
+        {
+          "stage": "constraint",
+          "verdict": "pass",
+          "status": "boxes=8 prechecked=0 verdicts={'pass': 8, 'violation': 0, 'inconclusive': 0}",
+          "objective": null,
+          "seconds": 2.7353832721710205,
+          "boxes": 8,
+          "n_lp": 948
+        },
+        {
+          "stage": "invariance",
+          "verdict": "pass",
+          "status": "boxes=8 prechecked=0 verdicts={'pass': 8, 'violation': 0, 'inconclusive': 0}",
+          "objective": null,
+          "seconds": 55.7773540019989,
+          "boxes": 8,
+          "n_lp": 1842
+        }
+      ],
+      "checkpoint": "models/robot_arm/logs/finetune_enum_milp_20261010_185906_1284094/verify_calls/call0006_iter19033.pth"
+    },
+    {
+      "call": 7,
+      "iter": 19033,
+      "stage": "reference",
+      "verdict": "proof",
+      "seconds": 88.73227898590267,
+      "load1_at_call": 58.96923828125,
+      "n_counterexamples": 0,
+      "solves": [
+        {
+          "stage": "constraint",
+          "verdict": "pass",
+          "status": "Optimal",
+          "objective": -0.014609192453320027,
+          "seconds": 3.650970436865464
+        },
+        {
+          "stage": "invariance",
+          "verdict": "pass",
+          "status": "Optimal",
+          "objective": -0.0002456976164717725,
+          "seconds": 85.04448077990673
+        }
+      ],
+      "checkpoint": "models/robot_arm/checkpoints/V_finetune_enum_milp_seed2.pth"
+    }
+  ],
+  "reference_reverify": {
+    "result": true,
+    "verified": true,
+    "seconds": 88.73227898590267,
+    "timeout": 1800,
+    "solves": [
+      {
+        "stage": "constraint",
+        "verdict": "pass",
+        "status": "Optimal",
+        "objective": -0.014609192453320027,
+        "seconds": 3.650970436865464
+      },
+      {
+        "stage": "invariance",
+        "verdict": "pass",
+        "status": "Optimal",
+        "objective": -0.0002456976164717725,
+        "seconds": 85.04448077990673
+      }
+    ]
+  },
+  "wall_time_s": 1237.634869763162,
+  "verified_wall_s": 1237.4578224560246,
+  "certified_wall_s": 1326.1901014419273,
+  "end_to_end_wall_s": 1327.8032686980441,
+  "load1_start": 49.44580078125,
+  "load1_end": 54.99853515625,
+  "n_cpus": 128,
+  "verifier": "milp_fast",
+  "milp_threads": 8,
+  "omp_num_threads": "2",
+  "device": "cuda",
+  "host": "t508-212n5",
+  "started_at": "2026-10-10T18:59:05",
+  "code_sha": "5bdf18a69324f04c9a19ce0361f04c58baa04838",
+  "code_root": ".",
+  "v_pretrain": "models/robot_arm/V_pretrain.pth",
+  "log_path": "models/robot_arm/logs/finetune_enum_milp_20261010_185906_1284094",
+  "model_path": "models/robot_arm/checkpoints/V_finetune_enum_milp_seed2.pth",
+  "config": {
+    "lr": 0.0001,
+    "max_iter": 40000,
+    "tol": 0.0001,
+    "capacity": 8000,
+    "sample_size": 512,
+    "replay": 3,
+    "max_skip": 2020,
+    "enum_freq": 1000,
+    "enum_n_samples": 20000,
+    "enum_coverage": 80.0,
+    "enum_n_trees": 300,
+    "enum_max_depth": 20,
+    "enum_n_train": 20000,
+    "enum_n_jobs": null,
+    "refill_threshold": 400,
+    "enum_source": "regions",
+    "region_n_seeds": 108823,
+    "region_band_frac": 0.1277,
+    "region_walk_steps": 2,
+    "region_walk_top": 300,
+    "region_max_cells": 20000,
+    "region_vertices": 4,
+    "region_band": 0.0,
+    "region_vband": 0.0,
+    "region_dry_every": 50,
+    "region_min_gap": 100,
+    "region_clean_trigger": 0.0001,
+    "region_worst_k": 0,
+    "region_weighting": "uniform",
+    "region_esr": 0,
+    "region_esr_n": 20,
+    "fallback_eval_rounds": 5,
+    "fallback_eval_samples": 30000,
+    "fallback_n_neighbors": 3000,
+    "fallback_radius": 0.05,
+    "search_size": 3175,
+    "reg_method": "ESR",
+    "esr_max_con": null,
+    "eps_h": 0.015,
+    "eps_v": 0.02,
+    "reg_coef": 0.1359,
+    "esr_box_ratio": 1.0,
+    "milp_timeout": 1800,
+    "min_region_frac": 0.0,
+    "max_skip_halving": 0,
+    "eval_every": 100,
+    "save_every": 5000
+  }
+}
