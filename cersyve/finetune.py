@@ -7,56 +7,19 @@ from .enumeration import (
     sample_from_regions
 )
 
-from collections import deque, defaultdict
 from .buffer import Buffer
-from .search import boundary_guided_search, projected_boundary_search, filter_counterexample
-from .utils import uniform, set_seed
+from .pgd import boundary_guided_search, projected_boundary_search, filter_counterexample
+from .utils import (uniform, set_seed, ScalarTracker, VerifierAccount, _region_fraction,
+                    estimate_tfr, make_center_box)
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Callable
 import os
+import time
 import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
-
-
-class ScalarTracker:
-    def __init__(self, window_size: int = 200, ema_alpha: float = 0.03):
-        self.window_size = window_size
-        self.ema_alpha = ema_alpha
-        self.windows = defaultdict(lambda: deque(maxlen=window_size))
-        self.ema_values = {}
-
-    def update(self, name: str, value: float):
-        v = float(value)
-        self.windows[name].append(v)
-
-        if name not in self.ema_values:
-            self.ema_values[name] = v
-        else:
-            self.ema_values[name] = (
-                self.ema_alpha * v + (1.0 - self.ema_alpha) * self.ema_values[name]
-            )
-
-    def mean(self, name: str):
-        w = self.windows[name]
-        if len(w) == 0:
-            return None
-        return sum(w) / len(w)
-
-    def std(self, name: str):
-        w = self.windows[name]
-        if len(w) == 0:
-            return None
-        m = sum(w) / len(w)
-        return (sum((x - m) ** 2 for x in w) / len(w)) ** 0.5
-
-    def ema(self, name: str):
-        return self.ema_values.get(name, None)
-
-    def values(self, name: str):
-        return list(self.windows[name])
 
 
 def finetune_value(
@@ -117,7 +80,7 @@ def finetune_value(
 
     log_path = os.path.join(
         log_dir,
-        f"finetune_basic_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        f"finetune_basic_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{os.getpid()}"
     )
     writer = SummaryWriter(log_path)
 
@@ -481,25 +444,6 @@ def finetune_value(
     print(f"\nTraining complete. Model saved to {save_path}")
     return log_path
 
-def make_center_box(x_low: np.ndarray, x_high: np.ndarray, ratio: float):
-    """
-    Create a box centered in the middle of [x_low, x_high],
-    shrunk by 'ratio' in each dimension.
-    ratio=1.0 -> full box
-    ratio=0.5 -> half-width box
-    """
-    x_low = x_low.astype(np.float32)
-    x_high = x_high.astype(np.float32)
-
-    center = (x_low + x_high) / 2.0
-    half = (x_high - x_low) / 2.0
-    new_half = half * float(ratio)
-
-    low = center - new_half
-    high = center + new_half
-    return low.astype(np.float32), high.astype(np.float32)
-
-
 def finetune_value_w_MILP(
     V_model: nn.Module,
     f_pi_model: nn.Module,
@@ -544,6 +488,9 @@ def finetune_value_w_MILP(
     milp_box_grow: float = 1.20,
     milp_box_max: float = 1.0,
     milp_max_inconclusive: int = 6,
+    esr_box_ratio: float = 0.7,
+    verifier: Optional[Callable] = None,
+    min_region_frac: float = 0.0,
 ):
     """
     Fine-tune value function with MILP formal verification.
@@ -573,7 +520,7 @@ def finetune_value_w_MILP(
 
     log_path = os.path.join(
         log_dir,
-        f"finetune_milp_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        f"finetune_milp_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{os.getpid()}"
     )
     os.makedirs(log_path, exist_ok=True)
 
@@ -583,6 +530,14 @@ def finetune_value_w_MILP(
     os.makedirs(milp_ckpt_dir, exist_ok=True)
 
     last_iter = -1
+
+    t_start = time.perf_counter()
+    verified_wall_s = None
+    account = VerifierAccount(verifier if verifier is not None else milp_verify,
+                              checkpoint_dir=os.path.join(log_path, "verify_calls"))
+    n_grad_steps = 0
+    last_verify_grad_step = -1
+    stalled = False
 
     for i in tqdm(range(max_iter), desc="Finetuning value function (MILP)"):
         last_iter = i
@@ -684,7 +639,7 @@ def finetune_value_w_MILP(
 
                 if reg_method == "ESR":
                     # Regularization su box centrale ristretto invece che su tutto il dominio
-                    x_reg_low, x_reg_high = make_center_box(x_low, x_high, 0.7)
+                    x_reg_low, x_reg_high = make_center_box(x_low, x_high, esr_box_ratio)
                     x_reg = uniform(x_reg_low, x_reg_high, search_size).astype(np.float32)
                     x_reg_t = torch.from_numpy(x_reg).to(device)
 
@@ -704,7 +659,7 @@ def finetune_value_w_MILP(
                     n_reg = x_reg.shape[1]
 
                 elif reg_method == "RSR":
-                    x_reg_low, x_reg_high = make_center_box(x_low, x_high, 0.7)
+                    x_reg_low, x_reg_high = make_center_box(x_low, x_high, esr_box_ratio)
                     x_reg = uniform(x_reg_low, x_reg_high, search_size).astype(np.float32)
                     n_reg = x_reg.shape[1]
 
@@ -741,6 +696,7 @@ def finetune_value_w_MILP(
             if isinstance(loss, torch.Tensor):
                 loss.backward()
                 optimizer.step()
+                n_grad_steps += 1
 
             writer.add_scalar("finetune/sample_size", n, i)
             writer.add_scalar(
@@ -783,7 +739,27 @@ def finetune_value_w_MILP(
             and (i - last_milp_iter) >= milp_cooldown
         )
 
+        if ready_for_milp and n_grad_steps == last_verify_grad_step:
+            # No weight has changed since the previous verifier call: the solver
+            # would be handed a bit-identical problem (same verdict, same cost).
+            print(f"\n  Iteration {i}: no gradient step since the last verifier call "
+                  f"— stopping (stalled).", flush=True)
+            stalled = True
+            break
+
+        if ready_for_milp and min_region_frac > 0:
+            frac = _region_fraction(V_model, x_low, x_high, max(search_size, 10000), device)
+            if frac < min_region_frac:
+                # a certificate of (almost) nothing is not a result: keep training instead
+                # of proving an empty set (floor shared by both loops, cannot change a proof)
+                print(f"\n  Iteration {i}: region fraction {frac:.4f} below floor "
+                      f"{min_region_frac} — verifier call refused.", flush=True)
+                writer.add_scalar("finetune/verify_refused_below_floor", frac, i)
+                skipped = 0
+                ready_for_milp = False
+
         if ready_for_milp:
+            last_verify_grad_step = n_grad_steps
             ckpt_path = os.path.join(milp_ckpt_dir, f"before_milp_iter{i+1}.pth")
             tmp_ckpt_path = ckpt_path + ".tmp"
             torch.save(V_model.state_dict(), tmp_ckpt_path)
@@ -801,14 +777,9 @@ def finetune_value_w_MILP(
 
             last_milp_iter = i
 
-            milp_result, milp_ce = milp_verify(
-                V_model,
-                h_model,
-                f_pi_model,
-                milp_x_low,
-                milp_x_high,
-                timeout=milp_timeout,
-                verbose=True,
+            milp_result, milp_ce = account(
+                V_model, h_model, f_pi_model, milp_x_low, milp_x_high,
+                iteration=i, stage="dry_spell", timeout=milp_timeout, verbose=True,
             )
 
             print(f"  MILP returned: {milp_result}", flush=True)
@@ -824,6 +795,7 @@ def finetune_value_w_MILP(
                 if milp_box_ratio >= milp_box_max - 1e-12:
                     print("  FULL verification box reached — stopping.", flush=True)
                     formally_verified = True
+                    verified_wall_s = time.perf_counter() - t_start
                     break
 
                 # altrimenti allarga gradualmente il box per verifiche future
@@ -908,7 +880,18 @@ def finetune_value_w_MILP(
 
     tfr = n_identified / max(n_truly_feasible, 1)
     print("\n")
-    return log_path, tfr, last_iter
+    proofs = [c for c in account.calls if c["verdict"] == "proof"]
+    stats = {
+        "formally_verified": formally_verified,
+        "stalled": stalled,
+        "final_proof_s": (proofs[-1]["seconds"] if (formally_verified and proofs) else None),
+        "iterations": last_iter,
+        "wall_time_s": time.perf_counter() - t_start,
+        "verified_wall_s": verified_wall_s,
+        "grad_steps": n_grad_steps,
+        **account.summary(),
+    }
+    return log_path, tfr, last_iter, stats
 
 def finetune_value_enum_MILP(
     V_model: nn.Module,
@@ -930,6 +913,7 @@ def finetune_value_enum_MILP(
     enum_n_trees: int = 2000,
     enum_max_depth: int = 20,
     enum_n_train: int = 40000,
+    enum_n_jobs: Optional[int] = None,
     refill_threshold: int = 500,
     # ── Neighborhood fallback ──
     fallback_eval_rounds: int = 5,
@@ -943,8 +927,12 @@ def finetune_value_enum_MILP(
     eps_h: float = 0.01,
     eps_v: float = 0.01,
     reg_coef: float = 0.1,
+    esr_box_ratio: float = 1.0,
     # ── MILP ──
     milp_timeout: int = 300,
+    verifier: Optional[Callable] = None,
+    min_region_frac: float = 0.0,
+    max_skip_halving: int = 1,
     # ── Logging / misc ──
     log_dir: Optional[str] = None,
     eval_every: int = 100,
@@ -952,7 +940,7 @@ def finetune_value_enum_MILP(
     save_path: Optional[str] = None,
     device: str = 'cpu',
     seed: int = 42
-) -> str:
+) -> tuple:
     """
     Fine-tune value function using **enumeration-based search + MILP verification**.
 
@@ -1037,7 +1025,16 @@ def finetune_value_enum_MILP(
     unsafe_regions: list = []
     enum_stale = False          # regions no longer produce violations
     milp_calls = 0              # adaptive skip shrinks after each MILP call
+
+    find_counterexamples = filter_counterexample
     current_max_skip = max_skip
+
+    t_start = time.perf_counter()
+    verified_wall_s = None
+    account = VerifierAccount(verifier if verifier is not None else milp_verify)
+    n_grad_steps = 0
+    last_verify_grad_step = -1
+    stalled = False
 
     buffer = Buffer(capacity, x_dim)
     optimizer = torch.optim.Adam(V_model.parameters(), lr=lr)
@@ -1047,9 +1044,10 @@ def finetune_value_enum_MILP(
     os.makedirs(log_dir, exist_ok=True)
     log_path = os.path.join(
         log_dir,
-        f"finetune_enum_milp_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        f"finetune_enum_milp_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{os.getpid()}"
     )
     writer = SummaryWriter(log_path)
+    account.checkpoint_dir = os.path.join(log_path, "verify_calls")
 
     # ================================================================
     #  Helper: neighbourhood amplification around seed points
@@ -1065,18 +1063,16 @@ def finetune_value_enum_MILP(
             return 0
 
         n_per_seed = max(1, fallback_n_neighbors // n_seeds)
-        neighbours: list = []
-        for j in range(n_seeds):
-            centre = seeds[:, j:j + 1]
-            noise = np.random.uniform(
-                -fallback_radius, fallback_radius,
-                size=(x_dim, n_per_seed)
-            ).astype(np.float32)
-            pts = np.clip(centre + noise, x_low[:, None], x_high[:, None])
-            neighbours.append(pts)
-
-        X_nbr = np.concatenate(neighbours, axis=1)
-        con, inv = filter_counterexample(
+        # one draw for every seed's neighbourhood (same distribution as the
+        # per-seed Python loop over up to 10^4 seeds)
+        noise = np.random.uniform(
+            -fallback_radius, fallback_radius,
+            size=(x_dim, n_seeds, n_per_seed)
+        ).astype(np.float32)
+        X_nbr = np.clip(seeds[:, :, None] + noise,
+                        x_low[:, None, None], x_high[:, None, None])
+        X_nbr = np.ascontiguousarray(X_nbr.reshape(x_dim, n_seeds * n_per_seed))
+        con, inv = find_counterexamples(
             X_nbr, h_model, V_model, f_pi_model, tol=tol, device=device
         )
         ce_nbr = con | inv
@@ -1092,21 +1088,18 @@ def finetune_value_enum_MILP(
 
         Returns the number of violations pushed to the buffer.
         """
-        all_violations = []
-        for _ in range(fallback_eval_rounds):
-            X_fb = uniform(x_low, x_high, fallback_eval_samples)
-            con, inv = filter_counterexample(
-                X_fb, h_model, V_model, f_pi_model, tol=tol, device=device
-            )
-            ce = con | inv
-            if ce.sum() > 0:
-                all_violations.append(X_fb[:, ce])
-
-        if len(all_violations) == 0:
+        # fallback_eval_rounds separate uniform draws of
+        # fallback_eval_samples states; one draw of the same total size has the
+        # same distribution and is labelled in a single batched forward pass
+        X_fb = uniform(x_low, x_high, fallback_eval_rounds * fallback_eval_samples)
+        con, inv = find_counterexamples(
+            X_fb, h_model, V_model, f_pi_model, tol=tol, device=device
+        )
+        ce = con | inv
+        if not ce.any():
             return 0
 
-        seeds = np.concatenate(all_violations, axis=1)
-        return _amplify_seeds(seeds)
+        return _amplify_seeds(X_fb[:, ce])
 
     # ================================================================
     #  Main training loop
@@ -1115,7 +1108,6 @@ def finetune_value_enum_MILP(
 
         # ── 1. Enumeration search (periodic) ──────────────────────
         #   Run at iter 0, then every enum_freq iterations.
-        #   Skip only if regions are still productive (not stale).
         need_enum = (i == 0) or (i % enum_freq == 0) if refill_threshold > 0 else False
 
         if need_enum:
@@ -1137,7 +1129,8 @@ def finetune_value_enum_MILP(
                 digits_to_consider=0,
                 seed=seed,
                 verbose=False,
-                device=device
+                device=device,
+                n_jobs=enum_n_jobs,
             )
             enum_stale = (len(unsafe_regions) == 0)
             writer.add_scalar('enum/n_regions', len(unsafe_regions), i)
@@ -1154,7 +1147,7 @@ def finetune_value_enum_MILP(
                 unsafe_regions, n_samples=enum_n_samples, digits_to_consider=0
             ).T.astype(np.float32)
 
-            con, inv = filter_counterexample(
+            con, inv = find_counterexamples(
                 X_cand, h_model, V_model, f_pi_model, tol=tol, device=device
             )
             ce = con | inv
@@ -1188,10 +1181,19 @@ def finetune_value_enum_MILP(
             x, c = buffer.pop(n)
 
             # Re-filter (some violations may have been fixed)
-            con, inv = filter_counterexample(
+            con, inv = find_counterexamples(
                 x, h_model, V_model, f_pi_model, tol=tol, device=device
             )
             x_con, x_inv = x[:, con], x[:, inv]
+            if (con | inv).any() and i % 50 == 0:
+                with torch.no_grad():
+                    xb = torch.from_numpy(x[:, con | inv]).to(device)
+                    vb = V_model(xb.T).T.cpu().numpy()[0, :]
+                    vbp = V_model(f_pi_model(xb).T).T.cpu().numpy()[0, :]
+                writer.add_scalar('batch/V_mean', float(vb.mean()), i)
+                writer.add_scalar('batch/V_min', float(vb.min()), i)
+                writer.add_scalar('batch/Vnext_mean', float(vbp.mean()), i)
+                writer.add_scalar('batch/Vnext_max', float(vbp.max()), i)
 
             c[con | inv] = 0
             c[~con & ~inv] += 1
@@ -1209,7 +1211,11 @@ def finetune_value_enum_MILP(
             if reg_method is not None and (n_con + n_inv > 0) and \
                (esr_max_con is None or (n_con + n_inv < esr_max_con)):
                 if reg_method == "ESR":
-                    x_reg_cand = uniform(x_low, x_high, search_size)
+                    if esr_box_ratio >= 1.0:
+                        x_reg_cand = uniform(x_low, x_high, search_size)
+                    else:
+                        x_reg_cand = uniform(*make_center_box(x_low, x_high, esr_box_ratio),
+                                             search_size)
                     x_reg_t = torch.from_numpy(x_reg_cand).to(device)
                     with torch.no_grad():
                         h_reg = h_model(x_reg_t.T).T.cpu().numpy()[0, :]
@@ -1221,7 +1227,11 @@ def finetune_value_enum_MILP(
                     x_reg = x_reg_cand[:, entering]
                     n_reg = x_reg.shape[1]
                 elif reg_method == "RSR":
-                    x_reg = uniform(x_low, x_high, search_size)
+                    if esr_box_ratio >= 1.0:
+                        x_reg = uniform(x_low, x_high, search_size)
+                    else:
+                        x_reg = uniform(*make_center_box(x_low, x_high, esr_box_ratio),
+                                        search_size)
                     n_reg = x_reg.shape[1]
 
             # ── Gradient step ──
@@ -1249,9 +1259,11 @@ def finetune_value_enum_MILP(
                 reg_loss = V_model(x_reg_t.T).T.mean()
                 loss = loss + reg_coef * reg_loss
 
+
             if isinstance(loss, torch.Tensor):
                 loss.backward()
                 optimizer.step()
+                n_grad_steps += 1
 
             writer.add_scalar('finetune/sample_size', n, i)
             writer.add_scalar('finetune/value_loss',
@@ -1284,12 +1296,29 @@ def finetune_value_enum_MILP(
         # ── 7. MILP verification when search is exhausted ─────────
         #   Uses adaptive skip: halves after each MILP call so the
         #   tail phase (sparse violations) converges faster.
+        if skipped >= current_max_skip and n_grad_steps == last_verify_grad_step:
+            # No weight has changed since the previous verifier call: the solver
+            # would be handed a bit-identical problem (same verdict, same cost).
+            tqdm.write(f"\n  Iteration {i}: no gradient step since the last verifier call "
+                       f"— stopping (stalled).")
+            stalled = True
+            break
+
+        if skipped >= current_max_skip and min_region_frac > 0:
+            frac = _region_fraction(V_model, x_low, x_high, max(search_size, 10000), device)
+            if frac < min_region_frac:
+                tqdm.write(f"  [iter {i}] region fraction {frac:.4f} below floor "
+                           f"{min_region_frac} — verifier call refused.")
+                writer.add_scalar('finetune/verify_refused_below_floor', frac, i)
+                skipped = 0
+
         if skipped >= current_max_skip:
+            last_verify_grad_step = n_grad_steps
             tqdm.write(f"\n  No counterexamples for {current_max_skip} iterations "
                        f"— running MILP verification...")
-            milp_result, milp_ce = milp_verify(
+            milp_result, milp_ce = account(
                 V_model, h_model, f_pi_model, x_low, x_high,
-                timeout=milp_timeout, verbose=True
+                iteration=i, stage="dry_spell", timeout=milp_timeout, verbose=True,
             )
             milp_calls += 1
 
@@ -1297,6 +1326,7 @@ def finetune_value_enum_MILP(
                 tqdm.write("  FORMALLY VERIFIED: no violations exist "
                            "(MILP certificate).")
                 formally_verified = True
+                verified_wall_s = time.perf_counter() - t_start
                 writer.add_scalar('finetune/milp_verified', 1, i)
                 break
 
@@ -1309,8 +1339,12 @@ def finetune_value_enum_MILP(
                 tqdm.write(f"  Amplified to {n_amplified} violations in buffer.")
 
                 skipped = 0
-                # Shrink max_skip: at most half, but never below 50
-                current_max_skip = max(50, current_max_skip // 2)
+                # shrink max_skip to at most half, never below 50. With
+                # max_skip_halving=0 the threshold stays constant, as in the PGD loop
+                # (user decision 2026-10-10: the halving made robot arm call the
+                # verifier every 50 dry iterations, 50-170 calls per run).
+                if max_skip_halving:
+                    current_max_skip = max(50, current_max_skip // 2)
                 writer.add_scalar('finetune/milp_counterexamples', n_ce, i)
                 writer.add_scalar('finetune/current_max_skip', current_max_skip, i)
 
@@ -1318,7 +1352,8 @@ def finetune_value_enum_MILP(
                 tqdm.write("  MILP inconclusive (timeout) "
                            "— continuing training.")
                 skipped = 0
-                current_max_skip = max(50, current_max_skip // 2)
+                if max_skip_halving:
+                    current_max_skip = max(50, current_max_skip // 2)
                 writer.add_scalar('finetune/milp_inconclusive', 1, i)
 
     # ── Save final model ──────────────────────────────────────────
@@ -1356,4 +1391,15 @@ def finetune_value_enum_MILP(
 
     tfr = n_identified / max(n_truly_feasible, 1)
     print("\n\n")
-    return log_path, tfr, i
+    proofs = [c for c in account.calls if c["verdict"] == "proof"]
+    stats = {
+        "formally_verified": formally_verified,
+        "stalled": stalled,
+        "final_proof_s": (proofs[-1]["seconds"] if (formally_verified and proofs) else None),
+        "iterations": i,
+        "wall_time_s": time.perf_counter() - t_start,
+        "verified_wall_s": verified_wall_s,
+        "grad_steps": n_grad_steps,
+        **account.summary(),
+    }
+    return log_path, tfr, i, stats

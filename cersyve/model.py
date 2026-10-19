@@ -134,6 +134,97 @@ def create_closed_loop_dynamics_model(
     return ClosedLoopDynamicsModel(f_model, pi_model, data, x_low, x_high, u_dim)
 
 
+def create_linear_closed_loop_model(
+    A: np.ndarray,
+    B: np.ndarray,
+    pi_model: nn.Module,
+    x_low: np.ndarray,
+    x_high: np.ndarray,
+    drift: Optional[np.ndarray] = None,
+) -> ClosedLoopDynamicsModel:
+    """
+    Exact closed-loop model for a linear system x' = clip(Ax + B pi(x)),
+    encoded as a ClosedLoopDynamicsModel with identity normalization so it is
+    directly usable by the MILP encoder and the training loops.
+    """
+    A = A.astype(np.float32)
+    B = B.astype(np.float32)
+    x_dim, u_dim = A.shape[0], B.shape[1]
+
+    # dx = (A - I)x + Bu, so x_next = x + dx
+    f_linear = nn.Linear(x_dim + u_dim, x_dim)
+    f_linear.weight.data = torch.from_numpy(
+        np.concatenate([A - np.eye(x_dim, dtype=np.float32), B], axis=1)
+    )
+    if drift is None:
+        f_linear.bias.data = torch.zeros(x_dim)
+    else:
+        f_linear.bias.data = torch.from_numpy(np.asarray(drift, dtype=np.float32))
+    f_model = nn.Sequential(f_linear)
+
+    identity_stats = {
+        'x_mean': np.zeros(x_dim, dtype=np.float32),
+        'x_std': np.ones(x_dim, dtype=np.float32),
+        'u_mean': np.zeros(u_dim, dtype=np.float32),
+        'u_std': np.ones(u_dim, dtype=np.float32),
+        'dx_mean': np.zeros(x_dim, dtype=np.float32),
+        'dx_std': np.ones(x_dim, dtype=np.float32),
+    }
+    model = ClosedLoopDynamicsModel(
+        f_model, pi_model, identity_stats,
+        x_low.astype(np.float32), x_high.astype(np.float32), u_dim,
+    )
+    for param in model.parameters():
+        param.requires_grad = False
+    return model
+
+
+def create_box_constraint_model(
+    x_dim: int,
+    limits: Dict[int, float],
+) -> nn.Sequential:
+    """
+    Exact piecewise-linear model of h(x) = max_i(|x_i| - c_i) over the given
+    {dim: c} limits, as a Linear/ReLU Sequential (MILP-encodable).
+
+    Uses |x| = relu(x) + relu(-x) and, for two limits,
+    max(p, q) = p + relu(q - p) with p >= 0 arranged by construction.
+    """
+    dims = sorted(limits)
+    if len(dims) not in (1, 2):
+        raise ValueError("supported: one or two constrained dimensions")
+
+    l1 = nn.Linear(x_dim, 2 * len(dims))
+    l1.weight.data = torch.zeros(2 * len(dims), x_dim)
+    for i, d in enumerate(dims):
+        l1.weight.data[2 * i, d] = 1.0
+        l1.weight.data[2 * i + 1, d] = -1.0
+    l1.bias.data = torch.zeros(2 * len(dims))
+
+    if len(dims) == 1:
+        c = limits[dims[0]]
+        l2 = nn.Linear(2, 1)
+        l2.weight.data = torch.tensor([[1.0, 1.0]])
+        l2.bias.data = torch.tensor([-c])
+        model = nn.Sequential(l1, nn.ReLU(), l2)
+    else:
+        c0, c1 = limits[dims[0]], limits[dims[1]]
+        l2 = nn.Linear(4, 2)
+        l2.weight.data = torch.tensor([
+            [1.0, 1.0, 0.0, 0.0],
+            [-1.0, -1.0, 1.0, 1.0],
+        ])
+        l2.bias.data = torch.tensor([0.0, c0 - c1])
+        l3 = nn.Linear(2, 1)
+        l3.weight.data = torch.tensor([[1.0, 1.0]])
+        l3.bias.data = torch.tensor([-c0])
+        model = nn.Sequential(l1, nn.ReLU(), l2, nn.ReLU(), l3)
+
+    for param in model.parameters():
+        param.requires_grad = False
+    return model
+
+
 class ValueConstraintModel(nn.Module):
     """
     Model that outputs [V(x), h(x)] for verification.

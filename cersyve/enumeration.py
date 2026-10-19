@@ -1,5 +1,7 @@
 """Enumeration-based counterexample search using Random Forest and hyperrectangles."""
 
+import os
+
 import torch
 import torch.nn as nn
 import numpy as np
@@ -213,7 +215,9 @@ def enumerate_unsafe_regions(
     pgd_eps: float = 0.1,
     seed: int = 42,
     verbose: bool = True,
-    device: str = 'cpu'
+    device: str = 'cpu',
+    n_jobs: Optional[int] = None,
+    tree_chunk: int = 100,
 ) -> Tuple[List[np.ndarray], Dict[str, float]]:
     """
     Enumerate regions where V(x) <= 0 - either safe or unsafe regions.
@@ -247,9 +251,10 @@ def enumerate_unsafe_regions(
         regions: List of hyperrectangles representing the specified region type
         stats: Dictionary with statistics (coverage, num_regions, etc.)
     """
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    
+    # Local generator: re-seeding the global numpy/torch RNG here made every
+    # draw of the surrounding training loop repeat after each enumeration.
+    rng = np.random.default_rng(seed)
+
     wrapper_model = wrapper_model.to(device)
     wrapper_model.eval()
     
@@ -259,9 +264,9 @@ def enumerate_unsafe_regions(
         print(f"Training random forest to identify {region_type} regions...")
     
     # Sample inputs for training RF
-    inputs = np.random.uniform(
-        input_domain[:, 0], 
-        input_domain[:, 1], 
+    inputs = rng.uniform(
+        input_domain[:, 0],
+        input_domain[:, 1],
         size=(n_training_samples, input_domain.shape[0])
     )
     
@@ -290,12 +295,19 @@ def enumerate_unsafe_regions(
         return [], {'coverage': 0.0, 'num_regions': 0, 'error_rate': 0.0}
     
     # Train Random Forest
+    # The forest is grown in chunks with warm_start: sklearn seeds every tree from
+    # the same random_state sequence, so the trees are identical to a one-shot fit
+    # (checked tree by tree), and the fit stops as soon as the leaf extraction
+    # below reaches the desired coverage instead of growing trees it never reads.
+    workers = (int(os.environ.get("OMP_NUM_THREADS", "2")) if n_jobs is None else n_jobs)
+    tree_chunk = max(1, int(tree_chunk)) if tree_chunk else n_decision_trees
     rf = RandomForestClassifier(
-        n_estimators=n_decision_trees,
+        n_estimators=min(tree_chunk, n_decision_trees),
         criterion=heuristic,
         max_depth=max_depth,
         random_state=seed,
-        n_jobs=-1
+        n_jobs=workers,
+        warm_start=True,
     )
     rf.fit(inputs, outputs)
     
@@ -303,7 +315,7 @@ def enumerate_unsafe_regions(
         print(f"Trained RF with {n_decision_trees} trees, extracting {region_type} regions...")
     
     # Get evaluation samples
-    eval_inputs = np.random.uniform(
+    eval_inputs = rng.uniform(
         input_domain[:, 0],
         input_domain[:, 1],
         size=(sample_size_evaluation, input_domain.shape[0])
@@ -337,8 +349,19 @@ def enumerate_unsafe_regions(
     current_regions = []
     final_coverage = 0.0
     error_rate = 0.0
-    
-    for i, tree in enumerate(rf.estimators_):
+
+    def _trees():
+        i = 0
+        while True:
+            while i < len(rf.estimators_):
+                yield i, rf.estimators_[i]
+                i += 1
+            if len(rf.estimators_) >= n_decision_trees:
+                return
+            rf.set_params(n_estimators=min(len(rf.estimators_) + tree_chunk, n_decision_trees))
+            rf.fit(inputs, outputs)
+
+    for i, tree in _trees():
         rects = get_pure_leaf_rectangles(tree, input_domain, extract_safe=enumerate_safe_regions)
         
         for rect in rects:
@@ -349,7 +372,7 @@ def enumerate_unsafe_regions(
             
             # Wilks filtering: verify the region is actually unsafe
             if wilks_filtering:
-                random_sample = np.random.uniform(
+                random_sample = rng.uniform(
                     rect_array[:, 0],
                     rect_array[:, 1],
                     size=(wilks_samples, rect_array.shape[0])
@@ -374,59 +397,38 @@ def enumerate_unsafe_regions(
         
         # Remove contained regions
         if incremental_coverage:
-            # Only add regions that cover new uncovered samples
-            # No containment check needed: leaves from same tree are disjoint
+            # Only add regions that cover new uncovered samples. The leaves of one
+            # tree are disjoint, so dropping the covered samples right away selects
+            # the same regions as a per-tree rescan and makes the coverage
+            # bookkeeping linear instead of quadratic in the number of regions.
             for region in current_regions:
-                # Check if this region covers any uncovered samples
                 if len(uncovered_samples) > 0:
                     inside_mask = is_inside(uncovered_samples, [region])
                     if np.any(inside_mask):
-                        # This region covers at least one uncovered sample
                         filtered_regions.append(region)
+                        uncovered_samples = uncovered_samples[~inside_mask]
         else:
             # Original behavior: add all non-contained regions
             filtered_regions = exact_remove_contained_regions(
-                current_regions, 
+                current_regions,
                 filtered_regions
             )
         current_regions = []
-        
+
         # Check coverage
         if len(filtered_regions) > 0:
-            # Calculate coverage based on ORIGINAL target samples
-            inside_mask = is_inside(original_target_samples, filtered_regions)
-            coverage = 100 * np.sum(inside_mask) / n_eval_target if n_eval_target > 0 else 0
-            
-            # Track remaining uncovered samples
-            uncovered_samples = original_target_samples[~inside_mask]
+            if not incremental_coverage:
+                inside_mask = is_inside(original_target_samples, filtered_regions)
+                uncovered_samples = original_target_samples[~inside_mask]
             n_uncovered = len(uncovered_samples)
-                
-            # Compute error: misclassified samples in the enumerated regions
-            # For safe regions: % of unsafe samples that fall into safe regions (shouldn't be there)
-            # For unsafe regions: % of safe samples that fall into unsafe regions (shouldn't be there)
-            if enumerate_safe_regions:
-                # Error: unsafe samples in safe regions
-                wrong_samples = eval_inputs[eval_outputs == -1]
-                if len(wrong_samples) > 0:
-                    wrong_inside = is_inside(wrong_samples, filtered_regions)
-                    error_rate = 100 * np.sum(wrong_inside) / len(wrong_samples)
-                else:
-                    error_rate = 0.0
-            else:
-                # Error: safe samples in unsafe regions
-                wrong_samples = eval_inputs[eval_outputs == 1]
-                if len(wrong_samples) > 0:
-                    wrong_inside = is_inside(wrong_samples, filtered_regions)
-                    error_rate = 100 * np.sum(wrong_inside) / len(wrong_samples)
-                else:
-                    error_rate = 0.0
-                
+            coverage = (100 * (n_eval_target - n_uncovered) / n_eval_target
+                        if n_eval_target > 0 else 0)
+
             if verbose and coverage > final_coverage:
                 print(f"\tTree {i+1}/{n_decision_trees}: "
                       f"{len(filtered_regions)} regions, "
-                      f"coverage: {coverage:.2f}% ({n_uncovered}/{n_eval_target} uncovered), "
-                      f"error rate: {error_rate:.2f}%")
-                
+                      f"coverage: {coverage:.2f}% ({n_uncovered}/{n_eval_target} uncovered)")
+
             final_coverage = coverage
             if final_coverage >= desired_coverage:
                 if verbose:
@@ -435,9 +437,19 @@ def enumerate_unsafe_regions(
 
         else:
             final_coverage = 0.0
-            error_rate = 0.0
             uncovered_samples = original_target_samples.copy()
             n_uncovered = len(uncovered_samples)
+
+    # Error rate (misclassified samples inside the enumerated regions) is only
+    # reported, never acted on: computed once, on a bounded subsample, instead of
+    # after every tree over the whole majority class.
+    if len(filtered_regions) > 0:
+        wrong_samples = (eval_inputs[eval_outputs == -1] if enumerate_safe_regions
+                         else eval_inputs[eval_outputs == 1])
+        if len(wrong_samples) > 2000:
+            wrong_samples = wrong_samples[rng.choice(len(wrong_samples), 2000, replace=False)]
+        if len(wrong_samples) > 0:
+            error_rate = 100 * float(np.mean(is_inside(wrong_samples, filtered_regions)))
     
     # add in the filtered regions the uncovered unsafe inputs 
     # if len(uncovered_samples) > 0:
@@ -466,7 +478,7 @@ def enumerate_unsafe_regions(
         
         if verification_samples.shape[0] > 0:
             # Import PGD search here to avoid circular import
-            from .search import boundary_guided_search
+            from .pgd import boundary_guided_search
             
             # Extract models from wrapper
             V_model = wrapper_model.V_model
@@ -514,6 +526,7 @@ def enumerate_unsafe_regions(
         'n_unsafe_samples': n_eval_unsafe,
         'n_safe_samples': n_eval_safe,
         'n_eval_samples': sample_size_evaluation,
+        'n_trees_fitted': len(rf.estimators_),
         'n_uncovered': len(uncovered_samples),
         'uncovered_samples': uncovered_samples,
         'error_rate': error_rate,
@@ -551,20 +564,15 @@ def sample_from_regions(
     if len(regions) == 0:
         return np.array([])
     
-    # Compute volume of each region
-    volumes = np.array([np.prod(r[:, 1] - r[:, 0]) for r in regions])
-    
-    # Sample proportionally to volume
+    # Volume-proportional choice of a region, uniform draw inside it: one
+    # vectorised draw for all samples.
+    regions_arr = np.asarray(regions, dtype=np.float64)          # (R, n, 2)
+    volumes = np.prod(regions_arr[:, :, 1] - regions_arr[:, :, 0], axis=1)
     probabilities = volumes / np.sum(volumes)
     region_indices = np.random.choice(len(regions), size=n_samples, p=probabilities)
-    
-    samples = []
-    for idx in region_indices:
-        region = regions[idx]
-        sample = np.random.uniform(region[:, 0], region[:, 1])
-        samples.append(sample)
-    
-    samples = np.array(samples)
+    low = regions_arr[region_indices, :, 0]
+    high = regions_arr[region_indices, :, 1]
+    samples = low + np.random.random_sample(low.shape) * (high - low)
     
     if digits_to_consider > 0:
         samples = np.round(samples, digits_to_consider)

@@ -8,7 +8,10 @@ from torch.utils.tensorboard import SummaryWriter
 from datetime import datetime
 from tqdm import tqdm
 from typing import Callable, Dict, Optional, Tuple
+from collections import deque, defaultdict
+import inspect
 import os
+import time
 
 
 def set_seed(seed: int):
@@ -385,6 +388,50 @@ def forward_with_apa(
     return x[:batch_size, :], apa_loss
 
 
+def infer_mlp_hidden_sizes_from_state_dict(
+    state_dict: Dict[str, torch.Tensor],
+    input_dim: int,
+    output_dim: int,
+) -> list:
+    """Infer the hidden layer sizes of a create_mlp checkpoint (0.weight, 2.weight, ...)."""
+    weights = sorted(
+        (int(k.split(".")[0]), tuple(v.shape))
+        for k, v in state_dict.items()
+        if k.endswith(".weight")
+    )
+    if not weights:
+        raise ValueError("no .weight tensors found in checkpoint")
+    first_out, first_in = weights[0][1]
+    if first_in != input_dim:
+        raise ValueError(
+            f"checkpoint input dim mismatch: expected {input_dim}, found {first_in}"
+        )
+    last_out, _ = weights[-1][1]
+    if last_out != output_dim:
+        raise ValueError(
+            f"checkpoint output dim mismatch: expected {output_dim}, found {last_out}"
+        )
+    return [shape[0] for _, shape in weights[:-1]]
+
+
+def load_mlp(
+    path: str,
+    input_dim: int,
+    output_dim: int,
+    device: str = 'cpu'
+) -> nn.Module:
+    """Load a create_mlp checkpoint, inferring the hidden sizes from the weights."""
+    from .model import create_mlp
+
+    state_dict = torch.load(path, map_location=device, weights_only=True)
+    hidden_sizes = infer_mlp_hidden_sizes_from_state_dict(
+        state_dict, input_dim, output_dim
+    )
+    model = create_mlp(input_dim, output_dim, hidden_sizes)
+    model.load_state_dict(state_dict)
+    return model.to(device)
+
+
 def get_activation_pattern(model: nn.Module, x: torch.Tensor) -> torch.Tensor:
     """
     Get activation patterns (binary masks) for ReLU neurons.
@@ -434,3 +481,158 @@ def count_activation_pattern(patterns: torch.Tensor) -> Tuple[list, list]:
             uni_pat_num.append(len(unique_patterns))
     
     return log_points[:len(uni_pat_num)], uni_pat_num
+
+
+class ScalarTracker:
+    def __init__(self, window_size: int = 200, ema_alpha: float = 0.03):
+        self.window_size = window_size
+        self.ema_alpha = ema_alpha
+        self.windows = defaultdict(lambda: deque(maxlen=window_size))
+        self.ema_values = {}
+
+    def update(self, name: str, value: float):
+        v = float(value)
+        self.windows[name].append(v)
+
+        if name not in self.ema_values:
+            self.ema_values[name] = v
+        else:
+            self.ema_values[name] = (
+                self.ema_alpha * v + (1.0 - self.ema_alpha) * self.ema_values[name]
+            )
+
+    def mean(self, name: str):
+        w = self.windows[name]
+        if len(w) == 0:
+            return None
+        return sum(w) / len(w)
+
+    def std(self, name: str):
+        w = self.windows[name]
+        if len(w) == 0:
+            return None
+        m = sum(w) / len(w)
+        return (sum((x - m) ** 2 for x in w) / len(w)) ** 0.5
+
+    def ema(self, name: str):
+        return self.ema_values.get(name, None)
+
+    def values(self, name: str):
+        return list(self.windows[name])
+
+
+class VerifierAccount:
+    """Accounting at the verifier boundary, shared by both training loops.
+
+    One *verifier call* is one invocation of the verifier function. With the
+    reference verifier (cersyve.milp.milp_verify) an invocation runs up to two
+    MILP solves: the constraint check and, if that passes, the invariance check.
+    ``milp_seconds`` is the wall-clock time elapsed inside the invocations,
+    summed; ``milp_solves`` is the number of solver runs they started.
+    """
+
+    def __init__(self, verifier, checkpoint_dir=None):
+        self.verifier = verifier
+        self.calls = []
+        self.checkpoint_dir = checkpoint_dir   # weights of every call are saved here (replay)
+        try:
+            self._pass_record = "record" in inspect.signature(verifier).parameters
+        except (TypeError, ValueError):
+            self._pass_record = False
+
+    def __call__(self, V_model, h_model, f_pi_model, x_low, x_high, *,
+                 iteration, stage, timeout, verbose=True):
+        solves = []
+        kwargs = dict(timeout=timeout, verbose=verbose)
+        if self._pass_record:
+            kwargs["record"] = solves
+        k = len(self.calls) + 1
+        ckpt = None
+        if self.checkpoint_dir is not None:
+            os.makedirs(self.checkpoint_dir, exist_ok=True)
+            ckpt = os.path.join(self.checkpoint_dir, f"call{k:04d}_iter{int(iteration)}.pth")
+            torch.save(V_model.state_dict(), ckpt)
+        load1 = os.getloadavg()[0]
+        t0 = time.perf_counter()
+        result, ce = self.verifier(V_model, h_model, f_pi_model, x_low, x_high, **kwargs)
+        seconds = time.perf_counter() - t0
+        self.calls.append({
+            "call": k,
+            "iter": int(iteration),
+            "stage": stage,
+            "verdict": {True: "proof", False: "refutation", None: "inconclusive"}[result],
+            "seconds": float(seconds),
+            "load1_at_call": float(load1),
+            "n_counterexamples": 0 if ce is None else int(ce.shape[1]),
+            "solves": solves,
+            "checkpoint": ckpt,
+        })
+        return result, ce
+
+    def summary(self):
+        verdicts = [c["verdict"] for c in self.calls]
+        return {
+            "verifier_calls": len(self.calls),
+            "milp_solves": int(sum(len(c["solves"]) for c in self.calls)),
+            "milp_seconds": float(sum(c["seconds"] for c in self.calls)),
+            "verifier_proofs": verdicts.count("proof"),
+            "verifier_refutations": verdicts.count("refutation"),
+            "verifier_inconclusive": verdicts.count("inconclusive"),
+            "verifier_log": self.calls,
+        }
+
+
+def _region_fraction(V_model, x_low, x_high, n_samples, device) -> float:
+    """Sampled fraction of the domain with V <= 0 (the size of the candidate set)."""
+    x = uniform(np.asarray(x_low, np.float32), np.asarray(x_high, np.float32), n_samples)
+    with torch.no_grad():
+        return float((V_model(torch.from_numpy(x).to(device).T).T <= 0).float().mean().item())
+
+
+def estimate_tfr(
+    V_model, h_model, f_pi_model, x_low, x_high,
+    n_samples: int = 100_000, horizon: int = 100, device: str = 'cpu',
+) -> float:
+    """True feasible rate: the fraction of empirically feasible states
+    (h <= 0 along a horizon-step rollout of the closed-loop model) that the
+    value function marks feasible (V <= 0). The same quantity the training
+    loops print at their end."""
+    V_model.eval()
+    x_low = np.asarray(x_low, dtype=np.float32)
+    x_high = np.asarray(x_high, dtype=np.float32)
+
+    x = uniform(x_low, x_high, n_samples).astype(np.float32)
+    x_t = torch.from_numpy(x).to(device)
+
+    with torch.no_grad():
+        v = V_model(x_t.T).T.cpu().numpy()[0, :]
+
+        feasible = np.ones(n_samples, dtype=bool)
+        x_cur = x_t.clone()
+        for _ in range(horizon):
+            h_cur = h_model(x_cur.T).T.cpu().numpy()[0, :]
+            feasible &= (h_cur <= 0)
+            x_cur = f_pi_model(x_cur)
+
+    n_feasible = feasible.sum()
+    n_identified = ((v <= 0) & feasible).sum()
+    return float(n_identified / max(n_feasible, 1))
+
+
+def make_center_box(x_low: np.ndarray, x_high: np.ndarray, ratio: float):
+    """
+    Create a box centered in the middle of [x_low, x_high],
+    shrunk by 'ratio' in each dimension.
+    ratio=1.0 -> full box
+    ratio=0.5 -> half-width box
+    """
+    x_low = x_low.astype(np.float32)
+    x_high = x_high.astype(np.float32)
+
+    center = (x_low + x_high) / 2.0
+    half = (x_high - x_low) / 2.0
+    new_half = half * float(ratio)
+
+    low = center - new_half
+    high = center + new_half
+    return low.astype(np.float32), high.astype(np.float32)
