@@ -1,20 +1,14 @@
-"""Obstacle-agnostic tube certificate for the lab track.
+"""RoboRacer system definition.
 
-x = [e_y, e_psi, y_left, y_right], one step per ds metres of travel (arclength, so the
-certificate is speed-free). e_y, e_psi are the car's offset and heading error relative to
-a planned path; y_left, y_right are the free room for the car's CENTER on each side of
-that path (walls and inflated obstacles minus the car's corner extent), held constant.
+State: [e_y, e_psi, y_left, y_right]
+- e_y, e_psi: offset and heading error relative to the planned path
+- y_left, y_right: free room on each side of the path, held constant
+One step per ds metres of arclength.
 
-    h(x) = max(e_y - y_left, -y_right - e_y, |e_psi| - psi_con)
+Action: [u]
+- u: curvature correction on top of the runtime feedforward
 
-Control is a curvature correction u on top of an exact runtime feedforward. With car
-arclength sigma, de_psi/dsigma = kappa_cmd - kappa cos(e_psi) / (1 - kappa e_y); the
-runtime commands kappa_cmd = u + kappa cos(e_psi) / (1 - kappa e_y), which makes
-de_psi/dsigma = u exactly for any path curvature kappa. The steering authority left for
-u is tan(delta_max)/L - KAPPA_FF_MAX, and the runtime brakes whenever the feedforward
-would exceed KAPPA_FF_MAX. The one modelling approximation left is sin(e_psi) ~ e_psi in
-de_y/dsigma, bounded by |e_psi| <= psi_con.
-Steering delay and braking are handled at runtime, outside the certificate.
+Constraint: h(x) = max(e_y - y_left, -y_right - e_y, |e_psi| - psi_con)
 """
 import numpy as np
 import torch
